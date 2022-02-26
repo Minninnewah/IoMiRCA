@@ -20,15 +20,13 @@ from sklearn import preprocessing
 
 ## =========== Data collection ===========
 
-metric_step = '5s'
+metric_step = '15s'
 smoothing_window = 12
 
 # kubectl get nodes -o wide | awk -F ' ' '{print $1 " : " $6":9100"}'
 node_dict = {
-                'kubernetes-minion-group-103j' : '10.166.0.21:9100',
-                'kubernetes-minion-group-k2nz' : '10.166.15.235:9100',
-                'kubernetes-minion-group-kvcr' : '10.166.0.13:9100',
-                'kubernetes-minion-group-r23j' : '10.166.0.14:9100',
+                'k8-cluster-worke-1-k8-cluster-worker-vnfd-vm-0' : '10.161.2.145:9100',
+                'k8-cluster-ns-1-k8-cluster-ns-vnfd-vm-0' : '10.161.2.141:9100'
         }
 
 
@@ -38,21 +36,28 @@ def latency_source_50(prom_url, start_time, end_time, faults_name):
 
     latency_df = pd.DataFrame()
 
-
+    print(prom_url)
     response = requests.get(prom_url,
-                            params={'query': 'histogram_quantile(0.50, sum(irate(istio_request_duration_seconds_bucket{reporter=\"source\", destination_workload_namespace=\"sock-shop\"}[1m])) by (destination_workload, source_workload, le))',
+                            params={'query': 'histogram_quantile(0.50, sum(irate(istio_request_duration_milliseconds_bucket{reporter=\"source\", destination_workload_namespace=\"sock-shop\"}[1m])) by (destination_workload, source_workload, le))',
                                     'start': start_time,
                                     'end': end_time,
                                     'step': metric_step})
     results = response.json()['data']['result']
+    print("TEST")
+    print(results)
+    print("TEST")
 
     for result in results:
+        print(str(result) + "\n")
         dest_svc = result['metric']['destination_workload']
         src_svc = result['metric']['source_workload']
         name = src_svc + '_' + dest_svc
-        values = result['values']
+        values = result['value']
+        if(src_svc == 'unknown' or dest_svc == 'unknown'):
+            #print("blub")
+            continue
 
-        values = list(zip(*values))
+        #values = list(zip(*values))
         if 'timestamp' not in latency_df:
             timestamp = values[0]
             latency_df['timestamp'] = timestamp
@@ -68,15 +73,21 @@ def latency_source_50(prom_url, start_time, end_time, faults_name):
                                     'end': end_time,
                                     'step': metric_step})
     results = response.json()['data']['result']
-
+    print(results)
     for result in results:
+        print(str(result) + "\n")
         dest_svc = result['metric']['destination_workload']
         src_svc = result['metric']['source_workload']
         name = src_svc + '_' + dest_svc
-#        print(svc)
-        values = result['values']
+        #print(name)
+        #print(result)
+        values = result['value']
+        #print(values)
+        if(src_svc == 'unknown' or dest_svc == 'unknown'):
+            #print("blub")
+            continue
 
-        values = list(zip(*values))
+        #values = list(zip(*values))
         if 'timestamp' not in latency_df:
             timestamp = values[0]
             latency_df['timestamp'] = timestamp
@@ -97,19 +108,26 @@ def latency_destination_50(prom_url, start_time, end_time, faults_name):
 
 
     response = requests.get(prom_url,
-                            params={'query': 'histogram_quantile(0.50, sum(irate(istio_request_duration_seconds_bucket{reporter=\"destination\", destination_workload_namespace=\"sock-shop\"}[1m])) by (destination_workload, source_workload, le))',
+                            params={'query': 'histogram_quantile(0.50, sum(irate(istio_request_duration_milliseconds_bucket{reporter=\"destination\", destination_workload_namespace=\"sock-shop\"}[1m])) by (destination_workload, source_workload, le))',
                                     'start': start_time,
                                     'end': end_time,
                                     'step': metric_step})
     results = response.json()['data']['result']
-
+    
+    print("destination\n")
     for result in results:
+        
         dest_svc = result['metric']['destination_workload']
         src_svc = result['metric']['source_workload']
         name = src_svc + '_' + dest_svc
-        values = result['values']
+        values = result['value']
+        if(src_svc == 'unknown' or dest_svc == 'unknown'):
+            #print("blub")
+            continue
+        
+        print(str(result) + "\n")
 
-        values = list(zip(*values))
+        #values = list(zip(*values))
         if 'timestamp' not in latency_df:
             timestamp = values[0]
             latency_df['timestamp'] = timestamp
@@ -127,13 +145,17 @@ def latency_destination_50(prom_url, start_time, end_time, faults_name):
     results = response.json()['data']['result']
 
     for result in results:
+        print(str(result) + "\n")
         dest_svc = result['metric']['destination_workload']
         src_svc = result['metric']['source_workload']
         name = src_svc + '_' + dest_svc
 #        print(svc)
-        values = result['values']
+        values = result['value']
+        if(src_svc == 'unknown' or dest_svc == 'unknown'):
+            #print("blub")
+            continue
 
-        values = list(zip(*values))
+        #values = list(zip(*values))
         if 'timestamp' not in latency_df:
             timestamp = values[0]
             latency_df['timestamp'] = timestamp
@@ -145,26 +167,31 @@ def latency_destination_50(prom_url, start_time, end_time, faults_name):
     filename = faults_name + '_latency_destination_50.csv'
     latency_df.set_index('timestamp')
     latency_df.to_csv(filename)
+    pd.set_option("display.max_rows", None, "display.max_columns", None)
     return latency_df
 
 def svc_metrics(prom_url, start_time, end_time, faults_name):
     response = requests.get(prom_url,
-                            params={'query': 'sum(rate(container_cpu_usage_seconds_total{namespace="sock-shop", container_name!~\'POD|istio-proxy|\'}[1m])) by (pod_name, instance, container)',
+                            params={'query': 'sum(rate(container_cpu_usage_seconds_total{namespace="sock-shop", container!~\'POD|istio-proxy|\'}[10m])) by (pod, instance, container)',
                                     'start': start_time,
                                     'end': end_time,
                                     'step': metric_step})
     results = response.json()['data']['result']
+    print(results)
 
     for result in results:
         df = pd.DataFrame()
         svc = result['metric']['container']
-        pod_name = result['metric']['pod_name']
+        print(svc)
+        pod = result['metric']['pod']
+        print(pod)
         nodename = result['metric']['instance']
+        print(nodename)
 
 #        print(svc)
-        values = result['values']
+        values = result['value']
 
-        values = list(zip(*values))
+        #values = list(zip(*values))
         if 'timestamp' not in df:
             timestamp = values[0]
             df['timestamp'] = timestamp
@@ -173,9 +200,9 @@ def svc_metrics(prom_url, start_time, end_time, faults_name):
         df['ctn_cpu'] = metric
         df['ctn_cpu'] = df['ctn_cpu'].astype('float64')
 
-        df['ctn_network'] = ctn_network(start_time, end_time, pod_name)
+        df['ctn_network'] = ctn_network(prom_url, start_time, end_time, pod)
         df['ctn_network'] = df['ctn_network'].astype('float64')
-        df['ctn_memory'] = ctn_memory(start_time, end_time, pod_name)
+        df['ctn_memory'] = ctn_memory(prom_url, start_time, end_time, pod)
         df['ctn_memory'] = df['ctn_memory'].astype('float64')
 
 #        response = requests.get('http://localhost:9090/api/v1/query',
@@ -189,14 +216,14 @@ def svc_metrics(prom_url, start_time, end_time, faults_name):
 #        instance = results[0]['metric']['instance']
         instance = node_dict[nodename]
 
-        df_node_cpu = node_cpu(start_time, end_time, instance)
+        df_node_cpu = node_cpu(prom_url, start_time, end_time, instance)
         df = pd.merge(df, df_node_cpu, how='left', on='timestamp')
 
 
-        df_node_network = node_network(start_time, end_time, instance)
+        df_node_network = node_network(prom_url, start_time, end_time, instance)
         df = pd.merge(df, df_node_network, how='left', on='timestamp')
 
-        df_node_memory = node_memory(start_time, end_time, instance)
+        df_node_memory = node_memory(prom_url, start_time, end_time, instance)
         df = pd.merge(df, df_node_memory, how='left', on='timestamp')
     
 
@@ -204,46 +231,46 @@ def svc_metrics(prom_url, start_time, end_time, faults_name):
         df.set_index('timestamp')
         df.to_csv(filename)
 
-def ctn_network(prom_url, start_time, end_time, pod_name):
+def ctn_network(prom_url, start_time, end_time, pod):
     response = requests.get(prom_url,
-                            params={'query': 'sum(rate(container_network_transmit_packets_total{namespace="sock-shop", pod_name="%s"}[1m])) / 1000 * sum(rate(container_network_transmit_packets_total{namespace="sock-shop", pod_name="%s"}[1m])) / 1000' % (pod_name, pod_name),
+                            params={'query': 'sum(rate(container_network_transmit_packets_total{namespace="sock-shop", pod="%s"}[1m])) / 1000 * sum(rate(container_network_transmit_packets_total{namespace="sock-shop", pod="%s"}[1m])) / 1000' % (pod, pod),
                                     'start': start_time,
                                     'end': end_time,
                                     'step': metric_step})
     results = response.json()['data']['result']
 
-    values = results[0]['values']
+    values = results[0]['value']
 
-    values = list(zip(*values))
+    #values = list(zip(*values))
     metric = pd.Series(values[1])
     return metric
 
 
-def ctn_memory(prom_url, start_time, end_time, pod_name):
+def ctn_memory(prom_url, start_time, end_time, pod):
     response = requests.get(prom_url,
-                            params={'query': 'sum(rate(container_memory_working_set_bytes{namespace="sock-shop", pod_name="%s"}[1m])) / 1000 ' % pod_name,
+                            params={'query': 'sum(rate(container_memory_working_set_bytes{namespace="sock-shop", pod="%s"}[1m])) / 1000 ' % pod,
                                     'start': start_time,
                                     'end': end_time,
                                     'step': metric_step})
     results = response.json()['data']['result']
 
-    values = results[0]['values']
+    values = results[0]['value']
 
-    values = list(zip(*values))
+    #values = list(zip(*values))
     metric = pd.Series(values[1])
     return metric
 
 
 def node_network(prom_url, start_time, end_time, instance):
     response = requests.get(prom_url,
-                            params={'query': 'rate(node_network_transmit_packets{device="eth0", instance="%s"}[1m]) / 1000' % instance,
+                            params={'query': 'rate(node_network_transmit_packets_total{device="ens3", instance="%s"}[1m]) / 1000' % instance,
                                     'start': start_time,
                                     'end': end_time,
                                     'step': metric_step})
     results = response.json()['data']['result']
-    values = results[0]['values']
+    values = results[0]['value']
 
-    values = list(zip(*values))
+    #values = list(zip(*values))
     df = pd.DataFrame()
     df['timestamp'] = values[0]
     df['timestamp'] = df['timestamp'].astype('datetime64[s]')
@@ -254,13 +281,13 @@ def node_network(prom_url, start_time, end_time, instance):
 
 def node_cpu(prom_url, start_time, end_time, instance):
     response = requests.get(prom_url,
-                            params={'query': 'sum(rate(node_cpu{mode != "idle",  mode!= "iowait", mode!~"^(?:guest.*)$", instance="%s" }[1m])) / count(node_cpu{mode="system", instance="%s"})' % (instance, instance),
+                            params={'query': 'sum(rate(node_cpu_seconds_total{mode != "idle",  mode!= "iowait", mode!~"^(?:guest.*)$", instance="%s" }[1m])) / count(node_cpu_seconds_total{mode="system", instance="%s"})' % (instance, instance),
                                     'start': start_time,
                                     'end': end_time,
                                     'step': metric_step})
     results = response.json()['data']['result']
-    values = results[0]['values']
-    values = list(zip(*values))
+    values = results[0]['value']
+    #values = list(zip(*values))
 #    metric = values[1]
 #    print(instance, len(metric))
 #    print(values[0])
@@ -274,14 +301,14 @@ def node_cpu(prom_url, start_time, end_time, instance):
 
 def node_memory(prom_url, start_time, end_time, instance):
     response = requests.get(prom_url,
-                            params={'query': '1 - sum(node_memory_MemAvailable{instance="%s"}) / sum(node_memory_MemTotal{instance="%s"})' % (instance, instance),
+                            params={'query': '1 - sum(node_memory_MemAvailable_bytes{instance="%s"}) / sum(node_memory_MemTotal_bytes{instance="%s"})' % (instance, instance),
                                     'start': start_time,
                                     'end': end_time,
                                     'step': metric_step})
     results = response.json()['data']['result']
-    values = results[0]['values']
+    values = results[0]['value']
 
-    values = list(zip(*values))
+    #values = list(zip(*values))
 #    metric = values[1]
 #    return metric
     df = pd.DataFrame()
@@ -308,9 +335,9 @@ def mpg(prom_url, faults_name):
 #        print(metric['source_workload'] , metric['destination_workload'] )
         df = df.append({'source':source, 'destination': destination}, ignore_index=True)
         DG.add_edge(source, destination)
-        
-        DG.node[source]['type'] = 'service'
-        DG.node[destination]['type'] = 'service'
+        print(source)
+        DG._node[source]['type'] = 'service'
+        DG._node[destination]['type'] = 'service'
 
     response = requests.get(prom_url,
                             params={'query': 'sum(istio_requests_total{destination_workload_namespace=\'sock-shop\'}) by (source_workload, destination_workload)'
@@ -326,8 +353,8 @@ def mpg(prom_url, faults_name):
         df = df.append({'source':source, 'destination': destination}, ignore_index=True)
         DG.add_edge(source, destination)
         
-        DG.node[source]['type'] = 'service'
-        DG.node[destination]['type'] = 'service'
+        DG._node[source]['type'] = 'service'
+        DG._node[destination]['type'] = 'service'
 
     response = requests.get(prom_url,
                             params={'query': 'sum(container_cpu_usage_seconds_total{namespace="sock-shop", container_name!~\'POD|istio-proxy\'}) by (instance, container)'
@@ -341,8 +368,8 @@ def mpg(prom_url, faults_name):
             df = df.append({'source':source, 'destination': destination}, ignore_index=True)
             DG.add_edge(source, destination)
             
-            DG.node[source]['type'] = 'service'
-            DG.node[destination]['type'] = 'host'
+            DG._node[source]['type'] = 'service'
+            DG._node[destination]['type'] = 'host'
 
     filename = faults_name + '_mpg.csv'
 ##    df.set_index('timestamp')
@@ -586,16 +613,21 @@ if __name__ == '__main__':
 
     latency_df_source = latency_source_50(prom_url, start_time, end_time, faults_name)
     latency_df_destination = latency_destination_50(prom_url, start_time, end_time, faults_name)
-    latency_df = latency_df_destination.add(latency_df_source) 
-    
+    print(latency_df_source)
+    print('-----------------------------------------------------------------')
+    print(latency_df_destination)
+    latency_df = latency_df_destination.add(latency_df_source) #fill_value=0
+    latency_df = latency_df_destination
     
     svc_metrics(prom_url, start_time, end_time, faults_name)
     
     DG = mpg(prom_url, faults_name)
 
     # anomaly detection on response time of service invocation
-    anomalies = birch_ad_with_smoothing(latency_df, ad_threshold)
-    
+    anomalies = birch_ad_with_smoöothing(latency_df, ad_threshold)
+    print("Anomalies")
+    print(anomalies)
+
     # get the anomalous service
     anomaly_nodes = []
     for anomaly in anomalies:

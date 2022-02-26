@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 import networkx as nx
 import csv
+import matplotlib.pyplot as plt
 
 from sklearn.cluster import Birch
 from sklearn import preprocessing
@@ -107,7 +108,8 @@ def node_weight(svc, anomaly_graph, baseline_df, faults_name):
     if num > 0:
         in_edges_weight_avg  = in_edges_weight_avg / num
 
-    filename = faults_name + '_' + svc + '.csv'
+    # filename = faults_name + '_' + svc + '.csv'
+    filename = faults_name + '_' + "carts" + '.csv'
     df = pd.read_csv(filename)
     node_cols = ['node_cpu', 'node_network', 'node_memory']
     max_corr = 0.01
@@ -122,7 +124,8 @@ def node_weight(svc, anomaly_graph, baseline_df, faults_name):
 
 def svc_personalization(svc, anomaly_graph, baseline_df, faults_name):
 
-    filename = faults_name + '_' + svc + '.csv'
+    # filename = faults_name + '_' + svc + '.csv'
+    filename = faults_name + '_' + "carts" + '.csv'
     df = pd.read_csv(filename)
     ctn_cols = ['ctn_cpu', 'ctn_network', 'ctn_memory']
     max_corr = 0.01
@@ -276,9 +279,12 @@ if __name__ == '__main__':
     ad_threshold = 0.045  
     
     
-    folders = ['1', '2', '3', '4', '5']
+    folders = ['1']
+    #folders = ['1', '2', '3', '4', '5']
     faults_type = ['svc_latency', 'service_cpu', 'service_memory'] #, 'service_memory', 'svc_latency'
+    #faults_type = ['service_cpu']  # , 'service_memory', 'svc_latency'
 #    faults_type = ['svc_latency', 'service_cpu']
+    #targets = ['carts']
     targets = ['front-end', 'catalogue', 'orders', 'user', 'carts', 'payment', 'shipping']
         
     for folder in folders:
@@ -290,7 +296,9 @@ if __name__ == '__main__':
                 print('target:', target, ' fault_type:', fault_type)
                 
                 # prefix of csv files 
-                faults_name = '../faults/' + folder + '/' + fault_type + '_' + target
+                #faults_name = '../faults/' + folder + '/' + fault_type + '_' + target
+                #faults_name = 'data/' + folder + '/' + fault_type + '_' + target
+                faults_name = 'data/' + folder + '/' + "service_cpu" + '_' + "carts"
                 
                 latency_df = rt_invocations(faults_name)
                 
@@ -329,7 +337,12 @@ if __name__ == '__main__':
 
                 num = print_rank(anomaly_score_new, target)
 
-                
+                #G = nx.petersen_graph()
+                #subax1 = plt.subplot(121)
+                #nx.draw(DG, with_labels=True, font_weight='bold')
+                #subax2 = plt.subplot(122)
+                #nx.draw_shell(DG, nlist=[range(5, 10), range(5)], with_labels=True, font_weight='bold')
+                #plt.show()  
 
                 filename = 'MicroRCA_results.csv'                    
                 with open(filename,'a') as f:
