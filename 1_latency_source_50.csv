@@ -1,0 +1,2 @@
+,timestamp,front-end_orders,front-end_user,orders_shipping,orders_carts,front-end_carts,front-end_catalogue,orders_payment,orders_user,carts_carts-db,user_user-db,catalogue_catalogue-db,orders_orders-db,queue-master_rabbitmq,shipping_rabbitmq,front-end_session-db
+0,,,,,,,,,,0.1028,0.1811333333333333,0.0,0.06853333333333333,0.0,0.0005333333333333334,0.0

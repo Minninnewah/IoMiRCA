@@ -36,6 +36,7 @@ def latency_source_50(prom_url, start_time, end_time, faults_name):
 
     latency_df = pd.DataFrame()
 
+    ####Istio request duration
     print(prom_url)
     response = requests.get(prom_url,
                             params={'query': 'histogram_quantile(0.50, sum(irate(istio_request_duration_milliseconds_bucket{reporter=\"source\", destination_workload_namespace=\"sock-shop\"}[1m])) by (destination_workload, source_workload, le))',
@@ -43,39 +44,43 @@ def latency_source_50(prom_url, start_time, end_time, faults_name):
                                     'end': end_time,
                                     'step': metric_step})
     results = response.json()['data']['result']
-    print("TEST")
-    print(results)
-    print("TEST")
 
+
+    #### Add all values to Dataframe
     for result in results:
-        print(str(result) + "\n")
         dest_svc = result['metric']['destination_workload']
         src_svc = result['metric']['source_workload']
         name = src_svc + '_' + dest_svc
         values = result['value']
-        if(src_svc == 'unknown' or dest_svc == 'unknown'):
+        #if(src_svc == 'unknown' or dest_svc == 'unknown'):
             #print("blub")
-            continue
+            #continue
 
         #values = list(zip(*values))
         if 'timestamp' not in latency_df:
             timestamp = values[0]
-            latency_df['timestamp'] = timestamp
+            latency_df['timestamp'] = pd.Series(timestamp)
             latency_df['timestamp'] = latency_df['timestamp'].astype('datetime64[s]')
-        metric = values[1]
+        metric = str(values[1])
+
         latency_df[name] = pd.Series(metric)
-        latency_df[name] = latency_df[name].astype('float64')  * 1000
+        print("###########")
+        print(latency_df[name])
+        latency_df[name] = latency_df[name].astype('float64')#  * 1000
+        print(latency_df[name])
 
 
+    #### Istio get send bytes
     response = requests.get(prom_url,
                             params={'query': 'sum(irate(istio_tcp_sent_bytes_total{reporter=\"source\"}[1m])) by (destination_workload, source_workload) / 1000',
                                     'start': start_time,
                                     'end': end_time,
                                     'step': metric_step})
     results = response.json()['data']['result']
-    print(results)
+
+
+    ###Replace latency with sent bytes total
     for result in results:
-        print(str(result) + "\n")
         dest_svc = result['metric']['destination_workload']
         src_svc = result['metric']['source_workload']
         name = src_svc + '_' + dest_svc
@@ -83,22 +88,29 @@ def latency_source_50(prom_url, start_time, end_time, faults_name):
         #print(result)
         values = result['value']
         #print(values)
-        if(src_svc == 'unknown' or dest_svc == 'unknown'):
+        #if(src_svc == 'unknown' or dest_svc == 'unknown'):
             #print("blub")
-            continue
+            #continue
 
         #values = list(zip(*values))
-        if 'timestamp' not in latency_df:
-            timestamp = values[0]
-            latency_df['timestamp'] = timestamp
-            latency_df['timestamp'] = latency_df['timestamp'].astype('datetime64[s]')
+        #if 'timestamp' not in latency_df:
+        #    print("should not happen")
+        #    timestamp = values[0]
+        #    latency_df['timestamp'] = timestamp
+        #    latency_df['timestamp'] = latency_df['timestamp'].astype('datetime64[s]')
         metric = values[1]
+        if name in latency_df:
+
+            print("Fail the value from above would be overwritten")
+
+        print(metric)
         latency_df[name] = pd.Series(metric)
+        print(latency_df[name])
         latency_df[name] = latency_df[name].astype('float64').rolling(window=smoothing_window, min_periods=1).mean()
+        print(latency_df[name])
 
     filename = faults_name + '_latency_source_50.csv'
     latency_df.set_index('timestamp')
-    latency_df.to_csv(filename)
     return latency_df
 
 
@@ -121,20 +133,20 @@ def latency_destination_50(prom_url, start_time, end_time, faults_name):
         src_svc = result['metric']['source_workload']
         name = src_svc + '_' + dest_svc
         values = result['value']
-        if(src_svc == 'unknown' or dest_svc == 'unknown'):
+        #if(src_svc == 'unknown' or dest_svc == 'unknown'):
             #print("blub")
-            continue
+            #continue
         
         print(str(result) + "\n")
 
         #values = list(zip(*values))
         if 'timestamp' not in latency_df:
             timestamp = values[0]
-            latency_df['timestamp'] = timestamp
+            latency_df['timestamp'] = pd.Series(timestamp)
             latency_df['timestamp'] = latency_df['timestamp'].astype('datetime64[s]')
         metric = values[1]
         latency_df[name] = pd.Series(metric)
-        latency_df[name] = latency_df[name].astype('float64')  * 1000
+        latency_df[name] = latency_df[name].astype('float64') # * 1000
 
 
     response = requests.get(prom_url,
@@ -151,22 +163,21 @@ def latency_destination_50(prom_url, start_time, end_time, faults_name):
         name = src_svc + '_' + dest_svc
 #        print(svc)
         values = result['value']
-        if(src_svc == 'unknown' or dest_svc == 'unknown'):
+        #if(src_svc == 'unknown' or dest_svc == 'unknown'):
             #print("blub")
-            continue
+        #    continue
 
         #values = list(zip(*values))
-        if 'timestamp' not in latency_df:
-            timestamp = values[0]
-            latency_df['timestamp'] = timestamp
-            latency_df['timestamp'] = latency_df['timestamp'].astype('datetime64[s]')
+        #if 'timestamp' not in latency_df:
+        #    timestamp = values[0]
+        #    latency_df['timestamp'] = timestamp
+        #    latency_df['timestamp'] = latency_df['timestamp'].astype('datetime64[s]')
         metric = values[1]
         latency_df[name] = pd.Series(metric)
         latency_df[name] = latency_df[name].astype('float64').rolling(window=smoothing_window, min_periods=1).mean()
 
     filename = faults_name + '_latency_destination_50.csv'
     latency_df.set_index('timestamp')
-    latency_df.to_csv(filename)
     pd.set_option("display.max_rows", None, "display.max_columns", None)
     return latency_df
 
@@ -602,29 +613,50 @@ if __name__ == '__main__':
     prom_url = args.url
       
     faults_name = folder
-    
-    end_time = time.time()
-    start_time = end_time - len_second
-
 
     # Tuning parameters
-    alpha = 0.55  
-    ad_threshold = 0.045  
+    alpha = 0.55
+    ad_threshold = 0.045
 
-    latency_df_source = latency_source_50(prom_url, start_time, end_time, faults_name)
-    latency_df_destination = latency_destination_50(prom_url, start_time, end_time, faults_name)
-    print(latency_df_source)
-    print('-----------------------------------------------------------------')
-    print(latency_df_destination)
-    latency_df = latency_df_destination.add(latency_df_source) #fill_value=0
-    latency_df = latency_df_destination
-    
+    n = 5
+    interval_time = 15
+    latency_df = pd.DataFrame()
+
+    for i in range(n):
+        end_time = time.time()
+        start_time = end_time - len_second
+        latency_df_source = latency_source_50(prom_url, start_time, end_time, faults_name)
+
+        latency_df_destination = latency_destination_50(prom_url, start_time, end_time, faults_name)
+
+        # remove timestamp, then add the values and add the timestamp again
+        timestamp = latency_df_source["timestamp"]
+        latency_df_destination_2 = latency_df_destination.drop('timestamp', axis=1)
+        latency_df_source_2 = latency_df_source.drop('timestamp', axis=1)
+        latency_combined = latency_df_destination_2.add(latency_df_source_2, fill_value=0)  # fill_value=0
+        latency_combined.insert(0, 'timestamp', timestamp)
+        latency_df.to_csv("source")
+        latency_df = latency_df.append(latency_combined)
+
+
+        while end_time + (interval_time) >= time.time():
+            print("Time")
+            print(start_time + (interval_time ))
+            print(time.time())
+            #print("start: " + str(start_time + (interval_time * 1000)))
+            #print("time: " + str(time.time()))
+            time.sleep(0.1)
+        print("TEST")
+    #latency_df.to_csv("source")
+    latency_df.to_html('temp.html')
+    print(latency_df)
+
     svc_metrics(prom_url, start_time, end_time, faults_name)
     
     DG = mpg(prom_url, faults_name)
 
     # anomaly detection on response time of service invocation
-    anomalies = birch_ad_with_smoöothing(latency_df, ad_threshold)
+    anomalies = birch_ad_with_smoothing(latency_df, ad_threshold)
     print("Anomalies")
     print(anomalies)
 

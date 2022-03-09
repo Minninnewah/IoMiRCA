@@ -1,0 +1,2 @@
+,timestamp,orders_shipping,front-end_user,orders_carts,orders_payment,orders_user,front-end_orders,front-end_carts,front-end_catalogue,orders_orders-db,queue-master_unknown,catalogue_unknown,user_unknown,user_user-db,carts_carts-db,catalogue_catalogue-db,queue-master_rabbitmq,shipping_rabbitmq,front-end_session-db
+0,2022-03-09 14:07:21,,9.862637362637363,20000.0,,9.840425531914894,5625.0,9934.21052631579,5.326086956521738,47.50526666666667,0.0,0.0,0.0,15.604133333333333,199.20253333333332,9.056733333333334,0.0,0.0,1.9605333333333332
