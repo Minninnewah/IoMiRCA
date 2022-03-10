@@ -37,7 +37,6 @@ def latency_source_50(prom_url, start_time, end_time, faults_name):
     latency_df = pd.DataFrame()
 
     ####Istio request duration
-    print(prom_url)
     response = requests.get(prom_url,
                             params={'query': 'histogram_quantile(0.50, sum(irate(istio_request_duration_milliseconds_bucket{reporter=\"source\", destination_workload_namespace=\"sock-shop\"}[1m])) by (destination_workload, source_workload, le))',
                                     'start': start_time,
@@ -64,10 +63,7 @@ def latency_source_50(prom_url, start_time, end_time, faults_name):
         metric = str(values[1])
 
         latency_df[name] = pd.Series(metric)
-        print("###########")
-        print(latency_df[name])
         latency_df[name] = latency_df[name].astype('float64')#  * 1000
-        print(latency_df[name])
 
 
     #### Istio get send bytes
@@ -100,14 +96,10 @@ def latency_source_50(prom_url, start_time, end_time, faults_name):
         #    latency_df['timestamp'] = latency_df['timestamp'].astype('datetime64[s]')
         metric = values[1]
         if name in latency_df:
-
             print("Fail the value from above would be overwritten")
 
-        print(metric)
         latency_df[name] = pd.Series(metric)
-        print(latency_df[name])
         latency_df[name] = latency_df[name].astype('float64').rolling(window=smoothing_window, min_periods=1).mean()
-        print(latency_df[name])
 
     filename = faults_name + '_latency_source_50.csv'
     latency_df.set_index('timestamp')
@@ -125,10 +117,8 @@ def latency_destination_50(prom_url, start_time, end_time, faults_name):
                                     'end': end_time,
                                     'step': metric_step})
     results = response.json()['data']['result']
-    
-    print("destination\n")
+
     for result in results:
-        
         dest_svc = result['metric']['destination_workload']
         src_svc = result['metric']['source_workload']
         name = src_svc + '_' + dest_svc
@@ -136,8 +126,7 @@ def latency_destination_50(prom_url, start_time, end_time, faults_name):
         #if(src_svc == 'unknown' or dest_svc == 'unknown'):
             #print("blub")
             #continue
-        
-        print(str(result) + "\n")
+
 
         #values = list(zip(*values))
         if 'timestamp' not in latency_df:
@@ -157,7 +146,6 @@ def latency_destination_50(prom_url, start_time, end_time, faults_name):
     results = response.json()['data']['result']
 
     for result in results:
-        print(str(result) + "\n")
         dest_svc = result['metric']['destination_workload']
         src_svc = result['metric']['source_workload']
         name = src_svc + '_' + dest_svc
@@ -205,7 +193,7 @@ def svc_metrics(prom_url, start_time, end_time, faults_name):
         #values = list(zip(*values))
         if 'timestamp' not in df:
             timestamp = values[0]
-            df['timestamp'] = timestamp
+            df['timestamp'] = pd.Series(timestamp)
             df['timestamp'] = df['timestamp'].astype('datetime64[s]')
         metric = pd.Series(values[1])
         df['ctn_cpu'] = metric
@@ -228,14 +216,18 @@ def svc_metrics(prom_url, start_time, end_time, faults_name):
         instance = node_dict[nodename]
 
         df_node_cpu = node_cpu(prom_url, start_time, end_time, instance)
-        df = pd.merge(df, df_node_cpu, how='left', on='timestamp')
+        print(df_node_cpu)
+        df['node_cpu'] = df_node_cpu
+        #df = pd.merge(df, df_node_cpu, how='left')
 
 
         df_node_network = node_network(prom_url, start_time, end_time, instance)
-        df = pd.merge(df, df_node_network, how='left', on='timestamp')
+        #df = pd.merge(df, df_node_network, how='left', on='timestamp')
+        df['node_network'] = df_node_network
 
         df_node_memory = node_memory(prom_url, start_time, end_time, instance)
-        df = pd.merge(df, df_node_memory, how='left', on='timestamp')
+        #df = pd.merge(df, df_node_memory, how='left', on='timestamp')
+        df['node_memory'] = df_node_memory
     
 
         filename = faults_name + '_' + svc + '.csv'
@@ -282,13 +274,14 @@ def node_network(prom_url, start_time, end_time, instance):
     values = results[0]['value']
 
     #values = list(zip(*values))
-    df = pd.DataFrame()
-    df['timestamp'] = values[0]
-    df['timestamp'] = df['timestamp'].astype('datetime64[s]')
-    df['node_network'] = pd.Series(values[1])
-    df['node_network'] = df['node_network'].astype('float64')
+    #df = pd.DataFrame()
+    #df['timestamp'] = pd.Series(values[0])
+    #df['timestamp'] = df['timestamp'].astype('datetime64[s]')
+    #df['node_network'] = pd.Series(values[1])
+    #df['node_network'] = df['node_network'].astype('float64')
 #    return metric
-    return df
+    #return df
+    return pd.Series(values[1])
 
 def node_cpu(prom_url, start_time, end_time, instance):
     response = requests.get(prom_url,
@@ -302,13 +295,14 @@ def node_cpu(prom_url, start_time, end_time, instance):
 #    metric = values[1]
 #    print(instance, len(metric))
 #    print(values[0])
-    df = pd.DataFrame()
-    df['timestamp'] = values[0]
-    df['timestamp'] = df['timestamp'].astype('datetime64[s]')
-    df['node_cpu'] = pd.Series(values[1])
-    df['node_cpu'] = df['node_cpu'].astype('float64')
+    #df = pd.DataFrame()
+    #df['timestamp'] = pd.Series(values[0])
+    #df['timestamp'] = df['timestamp'].astype('datetime64[s]')
+    #df['node_cpu'] = pd.Series(values[1])
+    #df['node_cpu'] = df['node_cpu'].astype('float64')
 #    return metric
-    return df
+    #return df
+    return pd.Series(values[1])
 
 def node_memory(prom_url, start_time, end_time, instance):
     response = requests.get(prom_url,
@@ -322,13 +316,14 @@ def node_memory(prom_url, start_time, end_time, instance):
     #values = list(zip(*values))
 #    metric = values[1]
 #    return metric
-    df = pd.DataFrame()
-    df['timestamp'] = values[0]
-    df['timestamp'] = df['timestamp'].astype('datetime64[s]')
-    df['node_memory'] = pd.Series(values[1])
-    df['node_memory'] = df['node_memory'].astype('float64')
+    #df = pd.DataFrame()
+    #df['timestamp'] = pd.Series(values[0])
+    #df['timestamp'] = df['timestamp'].astype('datetime64[s]')
+    #df['node_memory'] = pd.Series(values[1])
+    #df['node_memory'] = df['node_memory'].astype('float64')
 #    return metric
-    return df
+    #return df
+    return pd.Series(values[0])
 
 # Create Graph
 def mpg(prom_url, faults_name):
@@ -618,11 +613,12 @@ if __name__ == '__main__':
     alpha = 0.55
     ad_threshold = 0.045
 
-    n = 5
+    n = 2
     interval_time = 15
     latency_df = pd.DataFrame()
 
     for i in range(n):
+        print("Loop " + str(i), flush=True)
         end_time = time.time()
         start_time = end_time - len_second
         latency_df_source = latency_source_50(prom_url, start_time, end_time, faults_name)
@@ -640,16 +636,10 @@ if __name__ == '__main__':
 
 
         while end_time + (interval_time) >= time.time():
-            print("Time")
-            print(start_time + (interval_time ))
-            print(time.time())
-            #print("start: " + str(start_time + (interval_time * 1000)))
-            #print("time: " + str(time.time()))
             time.sleep(0.1)
-        print("TEST")
     #latency_df.to_csv("source")
     latency_df.to_html('temp.html')
-    print(latency_df)
+    #print(latency_df)
 
     svc_metrics(prom_url, start_time, end_time, faults_name)
     
