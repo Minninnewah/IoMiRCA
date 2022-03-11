@@ -184,11 +184,11 @@ def get_metric_services(prom_url, start_time, end_time, faults_name):
     for result in results:
         df = pd.DataFrame()
         svc = result['metric']['container']
-        print(svc)
+        #print(svc)
         pod = result['metric']['pod']
-        print(pod)
+        #print(pod)
         nodename = result['metric']['instance']
-        print(nodename)
+        #print(nodename)
 
         #        print(svc)
         values = result['value']
@@ -219,7 +219,7 @@ def get_metric_services(prom_url, start_time, end_time, faults_name):
         instance = node_dict[nodename]
 
         df_node_cpu = node_cpu(prom_url, start_time, end_time, instance)
-        print(df_node_cpu)
+        #print(df_node_cpu)
         df['node_cpu'] = df_node_cpu
         # df = pd.merge(df, df_node_cpu, how='left')
 
@@ -243,16 +243,16 @@ def svc_metrics(prom_url, start_time, end_time, faults_name):
                                     'end': end_time,
                                     'step': metric_step})
     results = response.json()['data']['result']
-    print(results)
+    #print(results)
 
     for result in results:
         df = pd.DataFrame()
         svc = result['metric']['container']
-        print(svc)
+        #print(svc)
         pod = result['metric']['pod']
-        print(pod)
+        #print(pod)
         nodename = result['metric']['instance']
-        print(nodename)
+        #print(nodename)
 
 #        print(svc)
         values = result['value']
@@ -283,7 +283,7 @@ def svc_metrics(prom_url, start_time, end_time, faults_name):
         instance = node_dict[nodename]
 
         df_node_cpu = node_cpu(prom_url, start_time, end_time, instance)
-        print(df_node_cpu)
+        #print(df_node_cpu)
         df['node_cpu'] = df_node_cpu
         #df = pd.merge(df, df_node_cpu, how='left')
 
@@ -407,7 +407,7 @@ def mpg(prom_url, faults_name):
 #        print(metric['source_workload'] , metric['destination_workload'] )
         df = df.append({'source':source, 'destination': destination}, ignore_index=True)
         DG.add_edge(source, destination)
-        print(source)
+        #print(source)
         DG._node[source]['type'] = 'service'
         DG._node[destination]['type'] = 'service'
 
@@ -712,8 +712,8 @@ if __name__ == '__main__':
         while end_time + (interval_time) >= time.time():
             time.sleep(0.1)
 
-    print(service_dict)
-    #latency_df.to_csv("source")
+    #store data to files
+    latency_df.to_csv("source")
     latency_df.to_html('temp.html')
     for key in service_dict_temp.keys():
         service_dict[key].to_csv(faults_name + '_' + key + '.csv')
