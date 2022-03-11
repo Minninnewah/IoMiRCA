@@ -169,6 +169,73 @@ def latency_destination_50(prom_url, start_time, end_time, faults_name):
     pd.set_option("display.max_rows", None, "display.max_columns", None)
     return latency_df
 
+def get_metric_services(prom_url, start_time, end_time, faults_name):
+
+    service_dict = {}
+
+    response = requests.get(prom_url,
+                            params={
+                                'query': 'sum(rate(container_memory_working_set_bytes{namespace="sock-shop", container!~\'POD|istio-proxy|\'}[10m])) by (pod, instance, container)',
+                                'start': start_time,
+                                'end': end_time,
+                                'step': metric_step})
+    results = response.json()['data']['result']
+
+    for result in results:
+        df = pd.DataFrame()
+        svc = result['metric']['container']
+        print(svc)
+        pod = result['metric']['pod']
+        print(pod)
+        nodename = result['metric']['instance']
+        print(nodename)
+
+        #        print(svc)
+        values = result['value']
+
+        # values = list(zip(*values))
+        if 'timestamp' not in df:
+            timestamp = values[0]
+            df['timestamp'] = pd.Series(timestamp)
+            df['timestamp'] = df['timestamp'].astype('datetime64[s]')
+        metric = pd.Series(values[1])
+        df['ctn_cpu'] = metric
+        df['ctn_cpu'] = df['ctn_cpu'].astype('float64')
+
+        df['ctn_network'] = ctn_network(prom_url, start_time, end_time, pod)
+        df['ctn_network'] = df['ctn_network'].astype('float64')
+        df['ctn_memory'] = ctn_memory(prom_url, start_time, end_time, pod)
+        df['ctn_memory'] = df['ctn_memory'].astype('float64')
+
+        #        response = requests.get('http://localhost:9090/api/v1/query',
+        #                                params={'query': 'sum(node_uname_info{nodename="%s"}) by (instance)' % nodename
+        #                                        })
+        #        results = response.json()['data']['result']
+        #
+        #        print(results)
+        #
+        #
+        #        instance = results[0]['metric']['instance']
+        instance = node_dict[nodename]
+
+        df_node_cpu = node_cpu(prom_url, start_time, end_time, instance)
+        print(df_node_cpu)
+        df['node_cpu'] = df_node_cpu
+        # df = pd.merge(df, df_node_cpu, how='left')
+
+        df_node_network = node_network(prom_url, start_time, end_time, instance)
+        # df = pd.merge(df, df_node_network, how='left', on='timestamp')
+        df['node_network'] = df_node_network
+
+        df_node_memory = node_memory(prom_url, start_time, end_time, instance)
+        # df = pd.merge(df, df_node_memory, how='left', on='timestamp')
+        df['node_memory'] = df_node_memory
+
+        #df.set_index('timestamp')
+        service_dict[svc] = df
+    return service_dict
+
+
 def svc_metrics(prom_url, start_time, end_time, faults_name):
     response = requests.get(prom_url,
                             params={'query': 'sum(rate(container_cpu_usage_seconds_total{namespace="sock-shop", container!~\'POD|istio-proxy|\'}[10m])) by (pod, instance, container)',
@@ -230,9 +297,8 @@ def svc_metrics(prom_url, start_time, end_time, faults_name):
         df['node_memory'] = df_node_memory
     
 
-        filename = faults_name + '_' + svc + '.csv'
         df.set_index('timestamp')
-        df.to_csv(filename)
+        return df
 
 def ctn_network(prom_url, start_time, end_time, pod):
     response = requests.get(prom_url,
@@ -599,6 +665,20 @@ def parse_args():
 
     return parser.parse_args()
 
+def get_latency(prom_url, start_time, end_time, faults_name):
+
+    latency_df_source = latency_source_50(prom_url, start_time, end_time, faults_name)
+
+    latency_df_destination = latency_destination_50(prom_url, start_time, end_time, faults_name)
+
+    # remove timestamp, then add the values and add the timestamp again
+    timestamp = latency_df_source["timestamp"]
+    latency_df_destination_2 = latency_df_destination.drop('timestamp', axis=1)
+    latency_df_source_2 = latency_df_source.drop('timestamp', axis=1)
+    latency_combined = latency_df_destination_2.add(latency_df_source_2, fill_value=0)  # fill_value=0
+    latency_combined.insert(0, 'timestamp', timestamp)
+    return latency_combined
+
 
 if __name__ == '__main__':
     args = parse_args()
@@ -616,32 +696,27 @@ if __name__ == '__main__':
     n = 2
     interval_time = 15
     latency_df = pd.DataFrame()
+    service_dict = {}
 
     for i in range(n):
         print("Loop " + str(i), flush=True)
         end_time = time.time()
         start_time = end_time - len_second
-        latency_df_source = latency_source_50(prom_url, start_time, end_time, faults_name)
-
-        latency_df_destination = latency_destination_50(prom_url, start_time, end_time, faults_name)
-
-        # remove timestamp, then add the values and add the timestamp again
-        timestamp = latency_df_source["timestamp"]
-        latency_df_destination_2 = latency_df_destination.drop('timestamp', axis=1)
-        latency_df_source_2 = latency_df_source.drop('timestamp', axis=1)
-        latency_combined = latency_df_destination_2.add(latency_df_source_2, fill_value=0)  # fill_value=0
-        latency_combined.insert(0, 'timestamp', timestamp)
-        latency_df.to_csv("source")
-        latency_df = latency_df.append(latency_combined)
-
-
+        latency_df = latency_df.append(get_latency(prom_url, start_time, end_time, faults_name), ignore_index=True)
+        service_dict_temp = get_metric_services(prom_url, start_time, end_time, faults_name)
+        for key in service_dict_temp.keys():
+            if key in service_dict:
+                service_dict[key] = service_dict[key].append(service_dict_temp[key], ignore_index=True)
+            else:
+                service_dict[key] = service_dict_temp[key]
         while end_time + (interval_time) >= time.time():
             time.sleep(0.1)
+
+    print(service_dict)
     #latency_df.to_csv("source")
     latency_df.to_html('temp.html')
-    #print(latency_df)
-
-    svc_metrics(prom_url, start_time, end_time, faults_name)
+    for key in service_dict_temp.keys():
+        service_dict[key].to_csv(faults_name + '_' + key + '.csv')
     
     DG = mpg(prom_url, faults_name)
 
