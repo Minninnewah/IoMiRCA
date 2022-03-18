@@ -25,8 +25,8 @@ smoothing_window = 12
 
 # kubectl get nodes -o wide | awk -F ' ' '{print $1 " : " $6":9100"}'
 node_dict = {
-                'k8-cluster-worke-1-k8-cluster-worker-vnfd-vm-0' : '10.161.2.145:9100',
-                'k8-cluster-ns-1-k8-cluster-ns-vnfd-vm-0' : '10.161.2.141:9100'
+                'k8s-cluster-work-1-k8-cluster-worker-vnfd-vm-0' : '10.161.2.129:9100',
+                'k8-cluster-ns-1-k8-cluster-ns-vnfd-vm-0' : '10.161.2.161:9100'
         }
 
 
@@ -216,7 +216,9 @@ def get_metric_services(prom_url, start_time, end_time, faults_name):
         #
         #
         #        instance = results[0]['metric']['instance']
-        instance = node_dict[nodename]
+
+        #instance = node_dict[nodename]
+        instance = nodename.replace('10250', '9100')
 
         df_node_cpu = node_cpu(prom_url, start_time, end_time, instance)
         #print(df_node_cpu)
@@ -243,7 +245,7 @@ def svc_metrics(prom_url, start_time, end_time, faults_name):
                                     'end': end_time,
                                     'step': metric_step})
     results = response.json()['data']['result']
-    #print(results)
+    print(results)
 
     for result in results:
         df = pd.DataFrame()
