@@ -111,7 +111,6 @@ def latency_destination_50(prom_url, start_time, end_time, faults_name):
             continue
 
         if 'timestamp' not in latency_df:
-            print("test")
             timestamp = values[0]
             latency_df['timestamp'] = pd.Series(timestamp)
             latency_df['timestamp'] = latency_df['timestamp'].astype('datetime64[s]')
@@ -504,14 +503,14 @@ def anomaly_subgraph(DG, anomalies, latency_df, faults_name, alpha):
             anomaly_graph.remove_edge(u,v)
             anomaly_graph.add_edge(v,u,weight=d['weight'])
 
-    plt.figure(figsize=(9,9))
-    #nx.draw(DG, with_labels=True, font_weight='bold')
-    pos = nx.spring_layout(anomaly_graph)
-    nx.draw(anomaly_graph, pos, with_labels=True, cmap = plt.get_cmap('jet'), node_size=1500, arrows=True, )
-    labels = nx.get_edge_attributes(anomaly_graph,'weight')
-    nx.draw_networkx_edge_labels(anomaly_graph,pos,edge_labels=labels)
-    #plt.show()
-    plt.savefig('anomaly_graph.png')
+#    plt.figure(figsize=(9,9))
+#    #nx.draw(DG, with_labels=True, font_weight='bold')
+#    pos = nx.spring_layout(anomaly_graph)
+#    nx.draw(anomaly_graph, pos, with_labels=True, cmap = plt.get_cmap('jet'), node_size=1500, arrows=True, )
+#    labels = nx.get_edge_attributes(anomaly_graph,'weight')
+#    nx.draw_networkx_edge_labels(anomaly_graph,pos,edge_labels=labels)
+#    #plt.show()
+#    plt.savefig('anomaly_graph.png')
 #
 ##    personalization['shipping'] = 2
 #    print('Personalization:', personalization)
@@ -583,6 +582,33 @@ def generate_latency_values(latency, amount_timestamps = 2, nan_values=False, fa
 
     return latency
 
+
+def get_metrics_row(start_time, end_time, latency_df=pd.DataFrame(), service_dict={}):
+
+    latency_df = latency_df.append(get_latency(prom_url, start_time, end_time, faults_name), ignore_index=True)
+    service_dict_temp = get_metric_services(prom_url, start_time, end_time, faults_name)
+    for key in service_dict_temp.keys():
+        if key in service_dict:
+            service_dict[key] = service_dict[key].append(service_dict_temp[key], ignore_index=True)
+        else:
+            service_dict[key] = service_dict_temp[key]
+
+    return latency_df, service_dict
+
+
+def wait_rest_of_interval_time(end_time, interval_time):
+    while end_time + (interval_time) >= time.time():
+        time.sleep(0.1)
+
+
+def store_metrics_to_files(latency_df, service_dict):
+    latency_df.to_csv("source")
+    latency_df.to_html('temp.html')
+    for key in service_dict.keys():
+        service_dict[key].to_csv(faults_name + '_' + key + '.csv')
+
+
+
 def one_time_RCA(prom_url, len_second, faults_name):
     # Tuning parameters
     alpha = 0.55  # 0.55
@@ -597,25 +623,12 @@ def one_time_RCA(prom_url, len_second, faults_name):
         print("Loop " + str(i), flush=True)
         end_time = time.time()
         start_time = end_time - len_second
-        latency_df = latency_df.append(get_latency(prom_url, start_time, end_time, faults_name), ignore_index=True)
-        service_dict_temp = get_metric_services(prom_url, start_time, end_time, faults_name)
-        for key in service_dict_temp.keys():
-            if key in service_dict:
-                service_dict[key] = service_dict[key].append(service_dict_temp[key], ignore_index=True)
-            else:
-                service_dict[key] = service_dict_temp[key]
+        latency_df, service_dict = get_metrics_row(start_time, end_time, latency_df, service_dict)
         if i + 1 < n:
-            while end_time + (interval_time) >= time.time():
-                time.sleep(0.1)
+            wait_rest_of_interval_time(end_time, interval_time)
 
     # latency_df = generate_latency_values(latency_df, amount_timestamps=5, nan_values=True, fault_injection=True)
-    # print(latency_df)
-
-    # store data to files
-    latency_df.to_csv("source")
-    latency_df.to_html('temp.html')
-    for key in service_dict_temp.keys():
-        service_dict[key].to_csv(faults_name + '_' + key + '.csv')
+    store_metrics_to_files(latency_df, service_dict)
 
     DG = mpg(prom_url, faults_name)
 
@@ -646,10 +659,44 @@ def one_time_RCA(prom_url, len_second, faults_name):
 # print(anomaly_score_new)
 
 
-def infinitRCA():
+def infinite_rca(prom_url, len_second, faults_name):
     # Tuning parameters
     alpha = 0.55  # 0.55
     ad_threshold = 0.085  # 0.045
+
+    interval_time = 15
+    considered_timestamps = 15
+    latency_df = pd.DataFrame()
+    service_dict = {}
+
+    DG = mpg(prom_url, faults_name)
+
+    while True:
+        print("Loop: " + str(time.asctime(time.localtime(time.time()))), flush=True)
+        end_time = time.time()
+        start_time = end_time - len_second
+        latency_df, service_dict = get_metrics_row(start_time, end_time, latency_df, service_dict)
+
+        if len(latency_df) >= considered_timestamps:
+            anomalies = birch_ad_with_smoothing(latency_df, ad_threshold)
+            #print("Anomalies")
+            #print(anomalies)
+
+            # get the anomalous service
+            anomaly_nodes = []
+            for anomaly in anomalies:
+                edge = anomaly.split('_')
+                anomaly_nodes.append(edge[1])
+
+            #anomaly_nodes = set(anomaly_nodes)
+
+            anomaly_score = anomaly_subgraph(DG, anomalies, latency_df, faults_name, alpha)
+            print(anomaly_score)
+            latency_df.drop(latency_df.head(1).index, inplace=True)
+        print(len(latency_df))
+        wait_rest_of_interval_time(end_time, interval_time)
+
+
 
 if __name__ == '__main__':
     args = parse_args()
@@ -660,8 +707,17 @@ if __name__ == '__main__':
       
     faults_name = folder
 
-    one_time_RCA(prom_url, len_second, faults_name)
+    #one_time_RCA(prom_url, len_second, faults_name)
+    infinite_rca(prom_url, len_second, faults_name)
 
 
 
+#from paramiko import SSHClient
 
+#client = SSHClient()
+#client.load_system_host_keys()
+#client.load_host_keys('~/.ssh/known_hosts')
+#client.set_missing_host_key_policy(AutoAddPolicy())
+
+#client.connect('example.com', username='user', password='secret')
+#client.close()

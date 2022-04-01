@@ -1,0 +1,21 @@
+kind: NetworkChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  namespace: sock-shop
+  name: del.carts2
+  annotations:
+    experiment.chaos-mesh.org/pause: 'true'
+spec:
+  selector:
+    namespaces:
+      - sock-shop
+    labelSelectors:
+      name: carts
+  mode: all
+  action: delay
+  duration: 60s
+  delay:
+    latency: 1s
+    correlation: '0'
+    jitter: 0ms
+  direction: to

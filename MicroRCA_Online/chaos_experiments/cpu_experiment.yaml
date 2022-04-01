@@ -1,0 +1,17 @@
+kind: StressChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  namespace: sock-shop
+  name: stresscpu.carts
+spec:
+  selector:
+    namespaces:
+      - sock-shop
+    labelSelectors:
+      name: carts
+  mode: all
+  stressors:
+    cpu:
+      workers: 20
+      load: 100
+  duration: 60s
