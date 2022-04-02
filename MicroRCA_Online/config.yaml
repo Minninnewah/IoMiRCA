@@ -1,0 +1,7 @@
+CONFIG:
+  N_TIMESTAMPS: 15 #How many timestamps are considered in the anomaly detection and RCA
+
+EVENTS:  # defined as loop_nr: fault where the loop_nr is the loop in which this fault should be injected and tha fault the parameter for chaos-mesh.py
+  #loop 0 is thereby the first loop when N_TIMESTAMPS is reached and the anomaly detection is done
+  5: memory
+  25: cpu

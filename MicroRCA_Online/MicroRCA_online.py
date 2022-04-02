@@ -14,6 +14,8 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import argparse
 #import csv
+import yaml
+import os
 
 from sklearn.cluster import Birch
 from sklearn import preprocessing
@@ -659,28 +661,34 @@ def one_time_RCA(prom_url, len_second, faults_name):
 # print(anomaly_score_new)
 
 
-def infinite_rca(prom_url, len_second, faults_name):
+def infinite_rca(prom_url, len_second, faults_name, config):
     # Tuning parameters
     alpha = 0.55  # 0.55
     ad_threshold = 0.085  # 0.045
 
     interval_time = 15
-    considered_timestamps = 15
+    considered_timestamps = config['CONFIG']['N_TIMESTAMPS']#15
     latency_df = pd.DataFrame()
     service_dict = {}
 
     DG = mpg(prom_url, faults_name)
+    event_counter = 0
 
     while True:
-        print("Loop: " + str(time.asctime(time.localtime(time.time()))), flush=True)
+        print("--- Loop [" + str(len(latency_df)) + " timestamps, " + str(event_counter) + " event-counter]: " + str(time.asctime(time.localtime(time.time()))), flush=True)
+
         end_time = time.time()
         start_time = end_time - len_second
         latency_df, service_dict = get_metrics_row(start_time, end_time, latency_df, service_dict)
 
         if len(latency_df) >= considered_timestamps:
+            if event_counter in config['EVENTS']:
+                os.system("py chaos-mesh.py --fault " + config['EVENTS'][event_counter])
+                print('***** Fault: ' + config['EVENTS'][event_counter] + ' started *****')
+
             anomalies = birch_ad_with_smoothing(latency_df, ad_threshold)
-            #print("Anomalies")
-            #print(anomalies)
+            print("Anomalies")
+            print(anomalies)
 
             # get the anomalous service
             anomaly_nodes = []
@@ -693,7 +701,8 @@ def infinite_rca(prom_url, len_second, faults_name):
             anomaly_score = anomaly_subgraph(DG, anomalies, latency_df, faults_name, alpha)
             print(anomaly_score)
             latency_df.drop(latency_df.head(1).index, inplace=True)
-        print(len(latency_df))
+            event_counter += 1
+
         wait_rest_of_interval_time(end_time, interval_time)
 
 
@@ -707,8 +716,11 @@ if __name__ == '__main__':
       
     faults_name = folder
 
+    with open('config.yaml') as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+
     #one_time_RCA(prom_url, len_second, faults_name)
-    infinite_rca(prom_url, len_second, faults_name)
+    infinite_rca(prom_url, len_second, faults_name, config)
 
 
 
