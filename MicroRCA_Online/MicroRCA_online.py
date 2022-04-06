@@ -234,8 +234,12 @@ def ctn_network(prom_url, start_time, end_time, pod):
 
     query = 'sum(rate(container_network_transmit_packets_total{namespace="sock-shop", pod="%s"}[2m])) / 1000 * sum(rate(container_network_transmit_packets_total{namespace="sock-shop", pod="%s"}[2m])) / 1000' % (pod, pod)
     results = prometheus_query(prom_url, start_time, end_time, query)
-
-    values = results[0]['value']
+    values = [0, float('NaN')]
+    if(len(results) == 0):
+        print("test")
+    else:
+        values = results[0]['value']
+        #print(values)
 
     metric = pd.Series(values[1])
     return metric
@@ -668,6 +672,7 @@ def infinite_rca(prom_url, len_second, faults_name, config):
 
     interval_time = 15
     considered_timestamps = config['CONFIG']['N_TIMESTAMPS']#15
+    anomaly_mode = config['CONFIG']['ANOMALY_MODE']
     latency_df = pd.DataFrame()
     service_dict = {}
 
@@ -700,8 +705,17 @@ def infinite_rca(prom_url, len_second, faults_name, config):
 
             anomaly_score = anomaly_subgraph(DG, anomalies, latency_df, faults_name, alpha)
             print(anomaly_score)
-            latency_df.drop(latency_df.head(1).index, inplace=True)
+            if anomaly_mode == 'sliding_window':
+                latency_df.drop(latency_df.head(1).index, inplace=True)
+            elif anomaly_mode == 'base_data':
+                latency_df.drop(latency_df.tail(1).index, inplace=True)
+            elif anomaly_mode =='sliding_window_improved':
+                if len(anomalies) == 0:
+                    latency_df.drop(latency_df.head(1).index, inplace=True)
+                else:
+                    latency_df.drop(latency_df.tail(1).index, inplace=True)
             event_counter += 1
+            print(latency_df)
 
         wait_rest_of_interval_time(end_time, interval_time)
 
