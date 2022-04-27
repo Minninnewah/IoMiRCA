@@ -288,7 +288,7 @@ def mpg_add_connection(df, DG, results):
         source = metric['source_workload']
         destination = metric['destination_workload']
         if source != 'unknown' and destination != 'unknown':
-            df = df.append({'source': source, 'destination': destination}, ignore_index=True)
+            df = pd.concat([df, pd.DataFrame.from_records([{'source': source, 'destination': destination}])], ignore_index=True)
             DG.add_edge(source, destination)
             DG._node[source]['type'] = 'service'
             DG._node[destination]['type'] = 'service'
@@ -300,7 +300,7 @@ def mpg_add_connection_host(df, DG, results):
         if 'container' in metric:
             source = metric['container']
             destination = metric['instance']
-            df = df.append({'source': source, 'destination': destination}, ignore_index=True)
+            df = pd.concat([df, pd.DataFrame.from_records([{'source': source, 'destination': destination}])], ignore_index=True)
             DG.add_edge(source, destination)
             DG._node[source]['type'] = 'service'
             DG._node[destination]['type'] = 'host'
@@ -344,6 +344,7 @@ def birch_ad_with_smoothing(latency_df, threshold):
     # output: anomalous service invocation
     
     anomalies = []
+    #counter = 0
     for svc, latency in latency_df.iteritems():
         # No anomaly detection in db
         if svc != 'timestamp' and 'Unnamed' not in svc and 'rabbitmq' not in svc and 'db' not in svc:
@@ -360,8 +361,19 @@ def birch_ad_with_smoothing(latency_df, threshold):
 
             labels = brc.labels_
             n_clusters = np.unique(labels).size
+
+            #print(l)
+            #print("bbbb")
+            #print(labels)
+            #y = np.empty(len(X))
+            #y.fill(counter)
+            #plt.scatter(X[:, 0], y, c=labels, cmap='rainbow', alpha=0.7, edgecolors='b')
+
+            #counter += 1
+
             if n_clusters > 1:
                 anomalies.append(svc)
+    #plt.show()
     return anomalies
 
 
@@ -591,11 +603,12 @@ def generate_latency_values(latency, amount_timestamps = 2, nan_values=False, fa
 
 def get_metrics_row(start_time, end_time, latency_df=pd.DataFrame(), service_dict={}):
 
-    latency_df = latency_df.append(get_latency(prom_url, start_time, end_time, faults_name), ignore_index=True)
+    latency_df = pd.concat([latency_df, get_latency(prom_url, start_time, end_time, faults_name)], ignore_index=True)
     service_dict_temp = get_metric_services(prom_url, start_time, end_time, faults_name)
     for key in service_dict_temp.keys():
         if key in service_dict:
-            service_dict[key] = service_dict[key].append(service_dict_temp[key], ignore_index=True)
+            service_dict[key] = pd.concat([service_dict[key], service_dict_temp[key]], ignore_index=True)
+            
         else:
             service_dict[key] = service_dict_temp[key]
 
@@ -698,8 +711,9 @@ def infinite_rca(prom_url, len_second, faults_name, config):
             # get the anomalous service
             anomaly_nodes = []
             for anomaly in anomalies:
-                edge = anomaly.split('_')
-                anomaly_nodes.append(edge[1])
+                if anomaly != "iot-handler_temperature-sensor":
+                    edge = anomaly.split('_')
+                    anomaly_nodes.append(edge[1])
 
             #anomaly_nodes = set(anomaly_nodes)
 
@@ -714,8 +728,9 @@ def infinite_rca(prom_url, len_second, faults_name, config):
                     latency_df.drop(latency_df.head(1).index, inplace=True)
                 else:
                     latency_df.drop(latency_df.tail(1).index, inplace=True)
+            else:
+                print("Anomaly mode not supported")
             event_counter += 1
-            print(latency_df)
 
         wait_rest_of_interval_time(end_time, interval_time)
 
@@ -735,15 +750,3 @@ if __name__ == '__main__':
 
     #one_time_RCA(prom_url, len_second, faults_name)
     infinite_rca(prom_url, len_second, faults_name, config)
-
-
-
-#from paramiko import SSHClient
-
-#client = SSHClient()
-#client.load_system_host_keys()
-#client.load_host_keys('~/.ssh/known_hosts')
-#client.set_missing_host_key_policy(AutoAddPolicy())
-
-#client.connect('example.com', username='user', password='secret')
-#client.close()
