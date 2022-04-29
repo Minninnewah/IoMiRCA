@@ -307,7 +307,7 @@ def mpg_add_connection_host(df, DG, results):
     return DG, df
 
 # Create Graph
-def mpg(prom_url, faults_name):
+def mpg(prom_url, faults_name, folder_name):
     DG = nx.DiGraph()
     df = pd.DataFrame(columns=['source', 'destination'])
     response = requests.get(prom_url,
@@ -333,7 +333,7 @@ def mpg(prom_url, faults_name):
 
     filename = faults_name + '_mpg.csv'
 ##    df.set_index('timestamp')
-    df.to_csv(filename)
+    df.to_csv(folder_name + "\\" + filename)
     return DG
 
 
@@ -620,15 +620,15 @@ def wait_rest_of_interval_time(end_time, interval_time):
         time.sleep(0.1)
 
 
-def store_metrics_to_files(latency_df, service_dict):
-    latency_df.to_csv("source")
-    latency_df.to_html('temp.html')
+def store_metrics_to_files(latency_df, service_dict, folder_name):
+    latency_df.to_csv(folder_name + "\\" + "latency.csv")
+    latency_df.to_html(folder_name + "\\" + 'latency.html')
     for key in service_dict.keys():
-        service_dict[key].to_csv(faults_name + '_' + key + '.csv')
+        service_dict[key].to_csv(folder_name + "\\" + faults_name + '_' + key + '.csv')
 
 
 
-def one_time_RCA(prom_url, len_second, faults_name):
+def one_time_RCA(prom_url, len_second, faults_name, folder_name):
     # Tuning parameters
     alpha = 0.55  # 0.55
     ad_threshold = 0.085  # 0.045
@@ -647,9 +647,9 @@ def one_time_RCA(prom_url, len_second, faults_name):
             wait_rest_of_interval_time(end_time, interval_time)
 
     # latency_df = generate_latency_values(latency_df, amount_timestamps=5, nan_values=True, fault_injection=True)
-    store_metrics_to_files(latency_df, service_dict)
+    store_metrics_to_files(latency_df, service_dict, folder_name)
 
-    DG = mpg(prom_url, faults_name)
+    DG = mpg(prom_url, faults_name, folder_name)
 
     # anomaly detection on response time of service invocation
     anomalies = birch_ad_with_smoothing(latency_df, ad_threshold)
@@ -678,7 +678,7 @@ def one_time_RCA(prom_url, len_second, faults_name):
 # print(anomaly_score_new)
 
 
-def infinite_rca(prom_url, len_second, faults_name, config):
+def infinite_rca(prom_url, len_second, faults_name, folder_name , config):
     # Tuning parameters
     alpha = 0.55  # 0.55
     ad_threshold = 0.085  # 0.045
@@ -689,7 +689,7 @@ def infinite_rca(prom_url, len_second, faults_name, config):
     latency_df = pd.DataFrame()
     service_dict = {}
 
-    DG = mpg(prom_url, faults_name)
+    DG = mpg(prom_url, faults_name, folder_name)
     event_counter = 0
 
     while True:
@@ -745,8 +745,11 @@ if __name__ == '__main__':
       
     faults_name = folder
 
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+
     with open('config.yaml') as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
-    #one_time_RCA(prom_url, len_second, faults_name)
-    infinite_rca(prom_url, len_second, faults_name, config)
+    #one_time_RCA(prom_url, len_second, faults_name, folder)
+    infinite_rca(prom_url, len_second, faults_name, folder, config)
