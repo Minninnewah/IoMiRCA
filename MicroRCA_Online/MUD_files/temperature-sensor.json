@@ -1,0 +1,99 @@
+{
+  "ietf-mud:mud": {
+    "mud-version": 1,
+    "extensions": [
+      "ol"
+    ],
+    "ol": {
+      "owners": [
+        "Copyright (c) ZHAW 2022. All Rights Reserved"
+      ],
+      "spdx-tag": "0BSD"
+    },
+    "mud-url": "https://example.com/random.json",
+    "mud-signature": "https://example.com/random.p7s",
+    "last-update": "2022-04-28T07:21:14+00:00",
+    "cache-validity": 48,
+    "is-supported": true,
+    "systeminfo": "Provide the temperature",
+    "mfg-name": "ZHAW",
+    "documentation": "https://example.com",
+    "model-name": "random",
+    "from-device-policy": {
+      "access-lists": {
+        "access-list": [
+          {
+            "name": "mud-39948-v4fr"
+          }
+        ]
+      }
+    },
+    "to-device-policy": {
+      "access-lists": {
+        "access-list": [
+          {
+            "name": "mud-39948-v4to"
+          }
+        ]
+      }
+    }
+  },
+  "ietf-access-control-list:acls": {
+    "acl": [
+      {
+        "name": "mud-39948-v4to",
+        "type": "ipv4-acl-type",
+        "aces": {
+          "ace": [
+            {
+              "name": "cl0-todev",
+              "matches": {
+                "ipv4": {
+                  "ietf-acldns:src-dnsname": "iot-handler",
+                  "protocol": 6
+                },
+                "tcp": {
+                  "ietf-mud:direction-initiated": "to-device",
+                  "destination-port": {
+                    "operator": "eq",
+                    "port": 3000
+                  }
+                }
+              },
+              "actions": {
+                "forwarding": "accept"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "mud-39948-v4fr",
+        "type": "ipv4-acl-type",
+        "aces": {
+          "ace": [
+            {
+              "name": "cl0-frdev",
+              "matches": {
+                "ipv4": {
+                  "ietf-acldns:dst-dnsname": "iot-handler",
+                  "protocol": 6
+                },
+                "tcp": {
+                  "ietf-mud:direction-initiated": "to-device",
+                  "source-port": {
+                    "operator": "eq",
+                    "port": 3000
+                  }
+                }
+              },
+              "actions": {
+                "forwarding": "accept"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
