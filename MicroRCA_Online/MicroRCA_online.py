@@ -49,6 +49,20 @@ def store_metrics_to_files(latency_df, service_dict, folder_name):
     for key in service_dict.keys():
         service_dict[key].to_csv(folder_name + "\\" + key + '.csv')
 
+def remove_IoT_device_metrics(data, mud_data):
+    connections = []
+    if isinstance(data, pd.DataFrame):
+        for connection in data.keys():
+            if any(device in connection for device in mud_data):
+                data = data.drop(connection, axis=1)
+                connections.append(connection)
+    
+    elif isinstance(data, dict):
+        for mud_connection in mud_data:
+            if mud_connection in data:
+                data.pop(mud_connection)
+    return data, connections
+
 def run(prom_url, len_second, folder, config, mud_data, infinit_run):
 
     #Anomaly detection
@@ -72,7 +86,8 @@ def run(prom_url, len_second, folder, config, mud_data, infinit_run):
 
         end_time = time.time()
         start_time = end_time - len_second
-        latency_df, service_dict = Metrics_collector.get_metrics_row(prom_url, start_time, end_time, latency_df, service_dict)
+        latency_df = Metrics_collector.get_latency_row(prom_url, start_time, end_time, latency_df)
+        latency_df, iot_connections = remove_IoT_device_metrics(latency_df, mud_data)
 
         if len(latency_df) >= considered_timestamps:
             #Fault injection handling
@@ -85,19 +100,22 @@ def run(prom_url, len_second, folder, config, mud_data, infinit_run):
                 latency_df, anomalies = Anomaly_detector.Anomaly_detection_loop(latency_df, ad_threshold, anomaly_mode)
             else:
                 latency_df, anomalies = Anomaly_detector.Anomaly_detection_loop(latency_df, ad_threshold, None)
-
-            # latency_df = generate_latency_values(latency_df, amount_timestamps=5, nan_values=True, fault_injection=True)
-            store_metrics_to_files(latency_df, service_dict, folder)
             
             if(len(anomalies) > 0):
+                service_dict = Metrics_collector.get_metrics_row(prom_url, start_time, end_time, service_dict)
+                service_dict, dumpster = remove_IoT_device_metrics(service_dict, mud_data)
+
+                # latency_df = generate_latency_values(latency_df, amount_timestamps=5, nan_values=True, fault_injection=True)
+                store_metrics_to_files(latency_df, service_dict, folder)
+
                 #RCA
-                anomaly_score = RCA_detector.anomaly_subgraph(DG, anomalies, latency_df, alpha, mud_data)
+                anomaly_score = RCA_detector.anomaly_subgraph_2(DG, anomalies, latency_df, alpha, service_dict, mud_data, iot_connections)
                 print(anomaly_score)
+
+            event_counter += 1
 
         wait_rest_of_interval_time(end_time, interval_time)
 
-        
-        event_counter += 1
 
 if __name__ == '__main__':
     args = parse_args()
@@ -115,5 +133,5 @@ if __name__ == '__main__':
 
     mud_data = MUD_handler.read_MUD_files(mud_folder)
 
-    run(prom_url, len_second, folder, config, mud_data, False)
+    run(prom_url, len_second, folder, config, mud_data, True)
     

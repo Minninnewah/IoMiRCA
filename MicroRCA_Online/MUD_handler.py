@@ -24,7 +24,8 @@ def read_MUD_files(mud_folder):
         communication_from = [dns_name["matches"]["ipv4"]["ietf-acldns:dst-dnsname"] for dns_name in acl_from_device["aces"]["ace"]]
         communication_to = [dns_name["matches"]["ipv4"]["ietf-acldns:src-dnsname"] for dns_name in acl_to_device["aces"]["ace"]]
 
-        communication_dns_names = set(communication_from).union(set(communication_to))
-        mud_data[device_name] = communication_dns_names
+
+        #communication_dns_names = set(communication_from).union(set(communication_to))
+        mud_data[device_name] = { "from": communication_from, "to": communication_to}
     print(mud_data)
     return mud_data

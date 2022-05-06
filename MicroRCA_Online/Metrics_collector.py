@@ -151,13 +151,13 @@ def get_metric_services(prom_url, start_time, end_time):
         instance = nodename.replace('10250', '9100')
 
         df_node_cpu = node_cpu(prom_url, start_time, end_time, instance)
-        df['node_cpu'] = df_node_cpu
+        df['node_cpu'] = df_node_cpu.astype('float64')
 
         df_node_network = node_network(prom_url, start_time, end_time, instance)
-        df['node_network'] = df_node_network
+        df['node_network'] = df_node_network.astype('float64')
 
         df_node_memory = node_memory(prom_url, start_time, end_time, instance)
-        df['node_memory'] = df_node_memory
+        df['node_memory'] = df_node_memory.astype('float64')
 
         service_dict[svc] = df
     return service_dict
@@ -355,10 +355,12 @@ def generate_latency_values(latency, amount_timestamps = 2, nan_values=False, fa
 
     return latency
 
-
-def get_metrics_row(prom_url, start_time, end_time, latency_df=pd.DataFrame(), service_dict={}):
-
+def get_latency_row(prom_url, start_time, end_time, latency_df=pd.DataFrame()):
     latency_df = pd.concat([latency_df, get_latency(prom_url, start_time, end_time)], ignore_index=True)
+    return latency_df
+
+def get_metrics_row(prom_url, start_time, end_time, service_dict={}):
+
     service_dict_temp = get_metric_services(prom_url, start_time, end_time)
     for key in service_dict_temp.keys():
         if key in service_dict:
@@ -367,4 +369,4 @@ def get_metrics_row(prom_url, start_time, end_time, latency_df=pd.DataFrame(), s
         else:
             service_dict[key] = service_dict_temp[key]
 
-    return latency_df, service_dict
+    return service_dict

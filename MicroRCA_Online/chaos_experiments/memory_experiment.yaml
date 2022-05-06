@@ -8,7 +8,7 @@ spec:
     namespaces:
       - sock-shop
     labelSelectors:
-      name: carts
+      name: catalogue
   mode: all
   stressors:
     memory:
