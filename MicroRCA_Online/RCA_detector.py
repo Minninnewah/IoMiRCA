@@ -52,13 +52,13 @@ def svc_personalization(svc, anomaly_graph, baseline_df, service_dict):
             edges_weight_avg = edges_weight_avg + data['weight']
 
     edges_weight_avg  = edges_weight_avg / num
-
     if svc not in service_dict:
         return edges_weight_avg, None
 
     #filename = folder + "\\" + svc + '.csv'
     #df = pd.read_csv(filename)
     df = service_dict[svc]
+    print(svc)
     ctn_cols = ['ctn_cpu', 'ctn_network', 'ctn_memory']
     max_corr = 0.01
     metric = 'ctn_cpu'
@@ -67,7 +67,6 @@ def svc_personalization(svc, anomaly_graph, baseline_df, service_dict):
         if temp > max_corr:
             max_corr = temp
             metric = col
-
     personalization = edges_weight_avg * max_corr
 
     return personalization, metric
@@ -209,6 +208,8 @@ def anomaly_subgraph_2(DG, anomalies, latency_df, alpha, service_dict, mud_data,
 
     # Get the subgraph of anomaly
     anomaly_graph = nx.DiGraph()
+    anomalous_iot_nodes = {}
+    nodes_2 = set()
     for node in nodes:
 
        # Set personalization with container resource usage
@@ -220,11 +221,15 @@ def anomaly_subgraph_2(DG, anomalies, latency_df, alpha, service_dict, mud_data,
 
                 if DG.nodes[v]['type'] == 'host':
                     data, col = node_weight(u, anomaly_graph, baseline_df, service_dict)
+                elif u + '_' + v in iot_connections:
+                    print("BLUBLBU")
+                    data = 0.0
                 else:
                     normal_edge = u + '_' + v
                     #print(normal_edge)
                     #print(latency_df[normal_edge])
                     data = baseline_df[u].corr(latency_df[normal_edge])
+                    nodes_2.add(normal_edge)
             data = round(data, 3)
             anomaly_graph.add_edge(u,v, weight=data)
             anomaly_graph.nodes[u]['type'] = DG.nodes[u]['type']
@@ -242,16 +247,20 @@ def anomaly_subgraph_2(DG, anomalies, latency_df, alpha, service_dict, mud_data,
                     print(iot_connection)
                     edges = iot_connection.split('_')
 
-                    if v in iot_connection:
+                    if edges[1] in mud_data:
                         iot_device = edges[1]
                         iot_service = edges[0]
                         rules = mud_data[iot_device]["to"]
                         print("TO")
-                    elif u in iot_connection:
+                    elif edges[0] in mud_data:
                         iot_device = edges[0]
                         iot_service = edges[1]
                         rules = mud_data[iot_device]["from"]
                         print("FROM")
+                    else:
+                        print("Missing Mud file")
+
+                    anomalous_iot_nodes[iot_service] = iot_device
 
                     #If connection is allowed accordingly to MUD the connection get the same weight as the connection to this service
                     # -> If multiple services then max
@@ -261,12 +270,16 @@ def anomaly_subgraph_2(DG, anomalies, latency_df, alpha, service_dict, mud_data,
                         weight = data
                         weight = 1
 
-                    edges = iot_connection.split('_')
-
-                    if anomaly_graph.has_edge(edges[0],edges[1]):
-                        if weight > anomaly_graph.get_edge_data(edges[0],edges[1]):
-                            anomaly_graph.remove_edge(edges[0],edges[1])
-                            anomaly_graph.add_edge(edges[0],edges[1], weight=weight)
+                    if anomaly_graph.has_edge(iot_service,iot_device):
+                        if weight > anomaly_graph[iot_service][iot_device]["weight"]:
+                            anomaly_graph.remove_edge(iot_service,iot_device)
+                            anomaly_graph.add_edge(iot_service,iot_device, weight=weight)
+                            anomaly_graph.nodes[u]['type'] = DG.nodes[u]['type']
+                            anomaly_graph.nodes[v]['type'] = DG.nodes[v]['type']
+                    elif anomaly_graph.has_edge(iot_device,iot_service):
+                        if weight > anomaly_graph[iot_device][iot_service]["weight"]:
+                            anomaly_graph.remove_edge(iot_device,iot_service)
+                            anomaly_graph.add_edge(iot_device,iot_service, weight=weight)
                             anomaly_graph.nodes[u]['type'] = DG.nodes[u]['type']
                             anomaly_graph.nodes[v]['type'] = DG.nodes[v]['type']
                     else:
@@ -274,7 +287,8 @@ def anomaly_subgraph_2(DG, anomalies, latency_df, alpha, service_dict, mud_data,
                         anomaly_graph.nodes[u]['type'] = DG.nodes[u]['type']
                         anomaly_graph.nodes[v]['type'] = DG.nodes[v]['type']
 
-
+    print("Anomalous iot nodes:")
+    print(anomalous_iot_nodes)
     anomaly_graph = anomaly_graph.reverse(copy=True)
 #
     edges = list(anomaly_graph.edges(data=True))
@@ -291,9 +305,21 @@ def anomaly_subgraph_2(DG, anomalies, latency_df, alpha, service_dict, mud_data,
     for node in nodes:
         max_corr, col = svc_personalization(node, anomaly_graph, baseline_df, service_dict)
         personalization[node] = max_corr / anomaly_graph.degree(node)
-        print(node, personalization[node])
+        if node in anomalous_iot_nodes:
+            personalization[anomalous_iot_nodes[node]] = personalization[node]
+        #Add other nodes as this is the only node and therefore I think the only node that get high results?
+    for node in nodes_2:
+        edge = node.split('_')
+        svc = edge[1]
+        baseline_df[svc] = latency_df[node]
+        max_corr, col = svc_personalization(svc, anomaly_graph, baseline_df, service_dict)
+        personalization[svc] = max_corr / anomaly_graph.degree(svc)
+        if svc in anomalous_iot_nodes:
+            personalization[anomalous_iot_nodes[svc]] = personalization[svc]
         #Add other nodes as this is the only node and therefore I think the only node that get high results?
 
+    print("Personalization:")
+    print(personalization)
     anomaly_score = nx.pagerank(anomaly_graph, alpha=0.85, personalization=personalization, max_iter=10000)
 
     anomaly_score = sorted(anomaly_score.items(), key=lambda x: x[1], reverse=True)
