@@ -8,10 +8,10 @@ spec:
     namespaces:
       - sock-shop
     labelSelectors:
-      name: catalogue
+      name: iot-handler
   mode: all
   stressors:
     memory:
-      workers: 4
+      workers: 6
       size: 25%
   duration: 60s

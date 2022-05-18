@@ -1,5 +1,9 @@
 import argparse
+import sys
+import time
+from turtle import fd
 from paramiko import SSHClient, RSAKey, AutoAddPolicy
+import requests
 
 
 
@@ -28,12 +32,22 @@ if __name__ == '__main__':
     args = parse_args()
 
     fault_type = args.fault
+
+#    if fault_type == 'mud':
+#        response = requests.get("http://" + args.host + ":3002/enable")
+#        if response.status_code == 200:
+#            print("Evil iot-handler is enabled")
+#            time.sleep(60)
+#            response = requests.get("http://" + args.host + ":3002/disable")
+#            if response.status_code == 200:
+#                print("Evil iot-handler is disabled")
+#        sys.exit(0)
+
     client = SSHClient()
     key = RSAKey.from_private_key_file(args.pkey)
     client.set_missing_host_key_policy(AutoAddPolicy())
     client.connect(hostname=args.host, username='ubuntu', pkey=key)
     ftp = client.open_sftp()
-
     experiment_config = 'delay_experiment.yaml'
 
     if fault_type == 'memory':

@@ -2,13 +2,13 @@ kind: StressChaos
 apiVersion: chaos-mesh.org/v1alpha1
 metadata:
   namespace: sock-shop
-  name: stresscpu.carts
+  name: stresscpu.handler
 spec:
   selector:
     namespaces:
       - sock-shop
     labelSelectors:
-      name: carts
+      name: temperature-sensor
   mode: all
   stressors:
     cpu:
