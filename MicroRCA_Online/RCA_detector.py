@@ -203,33 +203,13 @@ def replace_or_add_edge(graph, u, v, weight):
     graph.add_edge(u,v, weight=weight)
         #graph.nodes[u]['type'] = type_u
         #graph.nodes[v]['type'] = type_v
-1
-def anomaly_subgraph_2(DG, anomalies, latency_df, alpha, service_dict, mud_data, iot_connections):
 
-    printgraph(DG, "graph_2")
-    
-    # Get reported anomalous nodes
-    edges = []
-    nodes = set()
-    baseline_df = pd.DataFrame()
-    edge_df = {}
-    for anomaly in anomalies:
-        edge = anomaly.split('_')
-        edges.append(tuple(edge))
-        svc = edge[1]
-        nodes.add(svc)
-        baseline_df[svc] = latency_df[anomaly]
-        edge_df[svc] = anomaly
-
-
-
+def create_anomalous_subgraph(DG, nodes, edges, alpha, baseline_df, service_dict, latency_df, iot_connections, mud_data):
     # Get the subgraph of anomaly
     anomaly_graph = nx.DiGraph()
     anomalous_iot_nodes = {}
 
     for node in nodes:
-
-       # Set personalization with container resource usage
         for u, v, data in DG.out_edges(node, data=True):
             edge = (u,v)
             if edge in edges:
@@ -253,6 +233,7 @@ def anomaly_subgraph_2(DG, anomalies, latency_df, alpha, service_dict, mud_data,
                 if v in iot_connection or u in iot_connection:
                     edges = iot_connection.split('_')
 
+                    #TODO should no be based on MUD data, perhaps weight already define
                     if edges[1] in mud_data:
                         iot_device = edges[1]
                         iot_service = edges[0]
@@ -265,21 +246,21 @@ def anomaly_subgraph_2(DG, anomalies, latency_df, alpha, service_dict, mud_data,
                         print("Missing Mud file")
 
                     anomalous_iot_nodes[iot_service] = iot_device
-
     print("Anomalous iot nodes:")
     print(anomalous_iot_nodes)
+
+    #TODO
     for node in anomalous_iot_nodes:
         old_weight = 0
         if anomaly_graph.has_edge(node,anomalous_iot_nodes[node]):
-            #get min/max value from all incomming edges of the iot service
             old_weight = anomaly_graph.edges[node, anomalous_iot_nodes[node]]['weight']
-            #anomaly_graph.add_edge(node,anomalous_iot_nodes[node], weight=alpha)
-        weight = calc_IoT_values(Calculation_methods.SUM, old_weight, alpha)
+        weight = calc_IoT_values(Calculation_methods.MAX, old_weight, alpha)
         replace_or_add_edge(anomaly_graph, node, anomalous_iot_nodes[node], weight)
     #recalculate the weight of the iot device personalization based on the min/max of the ones before
+    
     anomaly_graph = anomaly_graph.reverse(copy=True)
     
-    # CHange direction of edges to host nodes
+    # Change direction of edges to host nodes
     edges = list(anomaly_graph.edges(data=True))
     for node in nodes:
         for u, v, d in edges:
@@ -287,63 +268,88 @@ def anomaly_subgraph_2(DG, anomalies, latency_df, alpha, service_dict, mud_data,
                 anomaly_graph.remove_edge(u,v)
                 anomaly_graph.add_edge(v,u,weight=d['weight'])
 
+    return anomaly_graph, anomalous_iot_nodes
 
-    
-
+def calculate_service_personalization(anomaly_graph, nodes, baseline_df, service_dict):
+    # Set personalization with container resource usage and MUD rules
     personalization = {}
     for node in nodes:
         max_corr, col = svc_personalization(node, anomaly_graph, baseline_df, service_dict)
         personalization[node] = max_corr / anomaly_graph.degree(node)
+
+    return personalization
+
+def iot_edge_weight_calculations(anomaly_graph, nodes, anomalous_iot_nodes, mud_data, alpha):
+    for node in nodes:
         if node in anomalous_iot_nodes:
-            #personalization[anomalous_iot_nodes[node]] = personalization[node]
-            #At the moment its overwritten -> this should be changed max, min etc...check if already a value
-            #if not allowed accordingly to mud then a higher value
-            #print(node + " : " + anomalous_iot_nodes[node] + " : " + str(anomalous_iot_nodes[node] in mud_data))
-            #if anomalous_iot_nodes[node] in mud_data: # should always be the case I think
-            #anomalous_iot_nodes[node] temperature-sensor
             edges_to_be_replaced = []
-            personalization_weight = personalization[node]
             for u, v in anomaly_graph.in_edges(anomalous_iot_nodes[node]):
                 #v: temperature-sensor
-                if u in mud_data[anomalous_iot_nodes[node]]["to"]:
-                    print("Fine_1: " + u + "_" + v)
-                else:
+                if u not in mud_data[anomalous_iot_nodes[node]]["to"]:
                     print("Violation_1: " + u + "_" + v)
-                    edges_to_be_replaced.append((u, v, 1))
-                    personalization_weight = calc_IoT_values(Calculation_methods.MUL, 2, personalization_weight)
-                    
-                    #replace_or_add_edge(anomaly_graph, u, v, 1)
+                    edges_to_be_replaced.append((u, v, alpha))
+
             for u, v in anomaly_graph.out_edges(anomalous_iot_nodes[node]):
                 #v: temperature-sensor
-                if v in mud_data[anomalous_iot_nodes[node]]["from"]:
-                    print("Fine_2: " + u + "_" + v)
-                else:
+                if v not in mud_data[anomalous_iot_nodes[node]]["from"]:
                     print("Violation_2: " + u + "_" + v)
-                    edges_to_be_replaced.append((u, v, 1))
-                    personalization_weight = calc_IoT_values(Calculation_methods.MUL, 2, personalization_weight)
-                    #replace_or_add_edge(anomaly_graph, u, v, 1)
-            
-            personalization[anomalous_iot_nodes[node]] = personalization_weight
+                    edges_to_be_replaced.append((u, v, alpha))
 
             #This has to be done this way because we cannot change the anomaly_graph while iterating through it
             for u, v, weight in edges_to_be_replaced:
                 print(u + v + str(weight))
                 replace_or_add_edge(anomaly_graph, u, v, weight)
+            
+def iot_personalization_weight_calculations(anomaly_graph, nodes, anomalous_iot_nodes, personalization, mud_data, alpha):
+    for node in nodes:
+        if node in anomalous_iot_nodes:
+            personalization_weight = 1 - personalization[node]
+            old_weight = 0
+            if anomalous_iot_nodes[node] in personalization:
+                old_weight = personalization[anomalous_iot_nodes[node]]
+            personalization_weight = calc_IoT_values(Calculation_methods.SUM, old_weight, personalization_weight)
 
+            for u, v in anomaly_graph.in_edges(anomalous_iot_nodes[node]):
+                #v: temperature-sensor
+                if u not in mud_data[anomalous_iot_nodes[node]]["to"]:
+                    print("Violation_1: " + u + "_" + v)
+                    personalization_weight = calc_IoT_values(Calculation_methods.SUM, personalization_weight, alpha) #penalty value
+                    
+            for u, v in anomaly_graph.out_edges(anomalous_iot_nodes[node]):
+                #v: temperature-sensor
+                if v not in mud_data[anomalous_iot_nodes[node]]["from"]:
+                    print("Violation_2: " + u + "_" + v)
+                    personalization_weight = calc_IoT_values(Calculation_methods.SUM, personalization_weight, alpha) #penalty value
+            
+            personalization[anomalous_iot_nodes[node]] = personalization_weight
+    return personalization
+
+def anomaly_subgraph_2(DG, anomalies, latency_df, alpha, service_dict, mud_data, iot_connections):
+
+    printgraph(DG, "graph_2")
     
+    # Get reported anomalous nodes
+    edges = []
+    nodes = set()
+    baseline_df = pd.DataFrame()
+    edge_df = {}
+    for anomaly in anomalies:
+        edge = anomaly.split('_')
+        edges.append(tuple(edge))
+        svc = edge[1]
+        nodes.add(svc)
+        baseline_df[svc] = latency_df[anomaly]
+        edge_df[svc] = anomaly
+
+
+    anomaly_graph, anomalous_iot_nodes = create_anomalous_subgraph(DG, nodes, edges, alpha, baseline_df, service_dict, latency_df, iot_connections, mud_data)
+    iot_edge_weight_calculations(anomaly_graph, nodes, anomalous_iot_nodes, mud_data, alpha)
+
+    personalization = calculate_service_personalization(anomaly_graph, nodes, baseline_df, service_dict)
+    personalization = iot_personalization_weight_calculations(anomaly_graph, nodes, anomalous_iot_nodes, personalization, mud_data, alpha)
+    
+
     printgraph(anomaly_graph, "anomaly_graph_2")
-
-
-        #Add other nodes as this is the only node and therefore I think the only node that get high results?
-#    for node in nodes_2:
-#        edge = node.split('_')
-#        svc = edge[1]
-#        baseline_df[svc] = latency_df[node]
-#        max_corr, col = svc_personalization(svc, anomaly_graph, baseline_df, service_dict)
-#        personalization[svc] = max_corr / anomaly_graph.degree(svc)
-#        if svc in anomalous_iot_nodes:
-#            personalization[anomalous_iot_nodes[svc]] = personalization[svc]
-#        #Add other nodes as this is the only node and therefore I think the only node that get high results?
 
     print("Personalization:")
     print(personalization)

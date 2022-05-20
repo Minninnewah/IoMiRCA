@@ -4,5 +4,6 @@ CONFIG:
 
 EVENTS:  # defined as loop_nr: fault where the loop_nr is the loop in which this fault should be injected and tha fault the parameter for chaos-mesh.py
   #loop 0 is thereby the first loop when N_TIMESTAMPS is reached and the anomaly detection is done
-  5: delay  #[memory, cpu, delay]
+  2: memory  #[memory, cpu, delay]
+  10: cpu
   25: cpu

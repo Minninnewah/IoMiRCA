@@ -10,7 +10,7 @@ spec:
     namespaces:
       - sock-shop
     labelSelectors:
-      name: temperature-sensor
+      name: iot-handler
   mode: all
   action: delay
   duration: 60s
