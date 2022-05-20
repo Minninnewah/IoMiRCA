@@ -251,12 +251,12 @@ def create_anomalous_subgraph(DG, nodes, edges, alpha, baseline_df, service_dict
 
     #TODO
     for node in anomalous_iot_nodes:
-        old_weight = 0
-        if anomaly_graph.has_edge(node,anomalous_iot_nodes[node]):
-            old_weight = anomaly_graph.edges[node, anomalous_iot_nodes[node]]['weight']
-        weight = calc_IoT_values(Calculation_methods.MAX, old_weight, alpha)
+        weight = 0
+        for u, v, weight_edge in anomaly_graph.in_edges(node, data=True):
+            # v = node
+            weight = calc_IoT_values(Calculation_methods.MAX, weight, weight_edge)
+        
         replace_or_add_edge(anomaly_graph, node, anomalous_iot_nodes[node], weight)
-    #recalculate the weight of the iot device personalization based on the min/max of the ones before
     
     anomaly_graph = anomaly_graph.reverse(copy=True)
     
@@ -286,18 +286,18 @@ def iot_edge_weight_calculations(anomaly_graph, nodes, anomalous_iot_nodes, mud_
             for u, v in anomaly_graph.in_edges(anomalous_iot_nodes[node]):
                 #v: temperature-sensor
                 if u not in mud_data[anomalous_iot_nodes[node]]["to"]:
-                    print("Violation_1: " + u + "_" + v)
+                    #print("Violation_1: " + u + "_" + v)
                     edges_to_be_replaced.append((u, v, alpha))
 
             for u, v in anomaly_graph.out_edges(anomalous_iot_nodes[node]):
                 #v: temperature-sensor
                 if v not in mud_data[anomalous_iot_nodes[node]]["from"]:
-                    print("Violation_2: " + u + "_" + v)
+                    #print("Violation_2: " + u + "_" + v)
                     edges_to_be_replaced.append((u, v, alpha))
 
             #This has to be done this way because we cannot change the anomaly_graph while iterating through it
             for u, v, weight in edges_to_be_replaced:
-                print(u + v + str(weight))
+                #print(u + v + str(weight))
                 replace_or_add_edge(anomaly_graph, u, v, weight)
             
 def iot_personalization_weight_calculations(anomaly_graph, nodes, anomalous_iot_nodes, personalization, mud_data, alpha):
@@ -312,13 +312,13 @@ def iot_personalization_weight_calculations(anomaly_graph, nodes, anomalous_iot_
             for u, v in anomaly_graph.in_edges(anomalous_iot_nodes[node]):
                 #v: temperature-sensor
                 if u not in mud_data[anomalous_iot_nodes[node]]["to"]:
-                    print("Violation_1: " + u + "_" + v)
+                    #print("Violation_1: " + u + "_" + v)
                     personalization_weight = calc_IoT_values(Calculation_methods.SUM, personalization_weight, alpha) #penalty value
                     
             for u, v in anomaly_graph.out_edges(anomalous_iot_nodes[node]):
                 #v: temperature-sensor
                 if v not in mud_data[anomalous_iot_nodes[node]]["from"]:
-                    print("Violation_2: " + u + "_" + v)
+                    #print("Violation_2: " + u + "_" + v)
                     personalization_weight = calc_IoT_values(Calculation_methods.SUM, personalization_weight, alpha) #penalty value
             
             personalization[anomalous_iot_nodes[node]] = personalization_weight
