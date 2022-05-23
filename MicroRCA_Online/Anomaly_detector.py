@@ -60,20 +60,6 @@ def Anomaly_detection_loop(latency_df, ad_threshold, anomaly_mode= None):
         anomaly_nodes.append(edge[1])
 
     #anomaly_nodes = set(anomaly_nodes)
-
-    if anomaly_mode is not None:
-    
-        if anomaly_mode == 'sliding_window':
-            latency_df.drop(latency_df.head(1).index, inplace=True)
-        elif anomaly_mode == 'base_data':
-            latency_df.drop(latency_df.tail(1).index, inplace=True)
-        elif anomaly_mode =='sliding_window_improved':
-            if len(anomalies) == 0:
-                latency_df.drop(latency_df.head(1).index, inplace=True)
-            else:
-                latency_df.drop(latency_df.tail(1).index, inplace=True)
-        else:
-            print("Anomaly mode not supported")
     
     return latency_df, anomalies
         

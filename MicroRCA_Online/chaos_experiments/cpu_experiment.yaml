@@ -8,7 +8,7 @@ spec:
     namespaces:
       - sock-shop
     labelSelectors:
-      name: temperature-sensor
+      name: iot-handler
   mode: all
   stressors:
     cpu:

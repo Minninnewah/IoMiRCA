@@ -49,21 +49,26 @@ def svc_personalization(svc, anomaly_graph, baseline_df, service_dict):
 
     edges_weight_avg  = edges_weight_avg / num
     if svc not in service_dict:
+        #print(svc)
         return edges_weight_avg, None
 
     #filename = folder + "\\" + svc + '.csv'
     #df = pd.read_csv(filename)
     df = service_dict[svc]
-    print(svc)
+    #print(svc)
     ctn_cols = ['ctn_cpu', 'ctn_network', 'ctn_memory']
     max_corr = 0.01
     metric = 'ctn_cpu'
     for col in ctn_cols:
+        #print(baseline_df[svc])
+        #print(df[col])
         temp = abs(baseline_df[svc].corr(df[col]))     
         if temp > max_corr:
             max_corr = temp
             metric = col
     personalization = edges_weight_avg * max_corr
+    #print(edges_weight_avg)
+    print(svc + " (" + str(metric) + "): " + str(max_corr))
 
     return personalization, metric
 
@@ -230,7 +235,7 @@ def create_anomalous_subgraph(DG, nodes, edges, alpha, baseline_df, service_dict
             # Add all connections to IoT devices from anomalous nodes
             for iot_connection in iot_connections:
                 
-                if v in iot_connection or u in iot_connection:
+                if v in iot_connection and v == node or u in iot_connection and u == node:
                     edges = iot_connection.split('_')
 
                     #TODO should no be based on MUD data, perhaps weight already define
@@ -252,10 +257,13 @@ def create_anomalous_subgraph(DG, nodes, edges, alpha, baseline_df, service_dict
     #TODO
     for node in anomalous_iot_nodes:
         weight = 0
-        for u, v, weight_edge in anomaly_graph.in_edges(node, data=True):
-            # v = node
-            weight = calc_IoT_values(Calculation_methods.MAX, weight, weight_edge)
         
+        for u, v, data in anomaly_graph.in_edges(node, data=True):
+            # v = node
+            weight = calc_IoT_values(Calculation_methods.MAX, weight, data['weight'])
+        
+        if weight == 0 and node in nodes: #connection to an anomalous node without incoming edges
+            weight = alpha
         replace_or_add_edge(anomaly_graph, node, anomalous_iot_nodes[node], weight)
     
     anomaly_graph = anomaly_graph.reverse(copy=True)
@@ -275,6 +283,8 @@ def calculate_service_personalization(anomaly_graph, nodes, baseline_df, service
     personalization = {}
     for node in nodes:
         max_corr, col = svc_personalization(node, anomaly_graph, baseline_df, service_dict)
+        print(node)
+        print(col)
         personalization[node] = max_corr / anomaly_graph.degree(node)
 
     return personalization

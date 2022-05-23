@@ -63,6 +63,30 @@ def remove_IoT_device_metrics(data, mud_data):
                 data.pop(mud_connection)
     return data, connections
 
+def adjust_metrics_data( latency_df, service_dict, anomaly_mode, anomalies):
+    if anomaly_mode is not None:
+    
+        if anomaly_mode == 'sliding_window':
+            latency_df.drop(latency_df.head(1).index, inplace=True)
+            for svc in service_dict:
+                service_dict[svc].drop(service_dict[svc].head(1).index, inplace=True)
+        elif anomaly_mode == 'base_data':
+            latency_df.drop(latency_df.tail(1).index, inplace=True)
+            for svc in service_dict:
+                service_dict[svc].drop(service_dict[svc].tail(1).index, inplace=True)
+        elif anomaly_mode =='sliding_window_improved':
+            if len(anomalies) == 0:
+                latency_df.drop(latency_df.head(1).index, inplace=True)
+                for svc in service_dict:
+                    service_dict[svc].drop(service_dict[svc].head(1).index, inplace=True)
+            else:
+                latency_df.drop(latency_df.tail(1).index, inplace=True)
+                for svc in service_dict:
+                    service_dict[svc].drop(service_dict[svc].tail(1).index, inplace=True)
+        else:
+            print("Anomaly mode not supported")
+    return latency_df, service_dict
+
 def run(prom_url, len_second, folder, config, mud_data, infinit_run):
 
     #Anomaly detection
@@ -88,6 +112,8 @@ def run(prom_url, len_second, folder, config, mud_data, infinit_run):
         start_time = end_time - len_second
         latency_df = Metrics_collector.get_latency_row(prom_url, start_time, end_time, latency_df)
         latency_df, iot_connections = remove_IoT_device_metrics(latency_df, mud_data)
+        service_dict = Metrics_collector.get_metrics_row(prom_url, start_time, end_time, service_dict)
+        service_dict, dumpster = remove_IoT_device_metrics(service_dict, mud_data)
 
         if len(latency_df) >= considered_timestamps:
             #Fault injection handling
@@ -101,9 +127,11 @@ def run(prom_url, len_second, folder, config, mud_data, infinit_run):
             else:
                 latency_df, anomalies = Anomaly_detector.Anomaly_detection_loop(latency_df, ad_threshold, None)
             
+            latency_df, service_dict = adjust_metrics_data( latency_df, service_dict, anomaly_mode, anomalies)
+
             if(len(anomalies) > 0):
-                service_dict = Metrics_collector.get_metrics_row(prom_url, start_time, end_time, service_dict)
-                service_dict, dumpster = remove_IoT_device_metrics(service_dict, mud_data)
+                #service_dict = Metrics_collector.get_metrics_row(prom_url, start_time, end_time, service_dict)
+                #service_dict, dumpster = remove_IoT_device_metrics(service_dict, mud_data)
 
                 # latency_df = generate_latency_values(latency_df, amount_timestamps=5, nan_values=True, fault_injection=True)
                 store_metrics_to_files(latency_df, service_dict, folder)
