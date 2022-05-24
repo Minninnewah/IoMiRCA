@@ -64,6 +64,8 @@ def remove_IoT_device_metrics(data, mud_data):
     return data, connections
 
 def adjust_metrics_data( latency_df, service_dict, anomaly_mode, anomalies):
+    #print(anomaly_mode)
+    #print(latency_df["catalogue_iot-handler"])
     if anomaly_mode is not None:
     
         if anomaly_mode == 'sliding_window':
@@ -85,6 +87,7 @@ def adjust_metrics_data( latency_df, service_dict, anomaly_mode, anomalies):
                     service_dict[svc].drop(service_dict[svc].tail(1).index, inplace=True)
         else:
             print("Anomaly mode not supported")
+    #print(latency_df["catalogue_iot-handler"])
     return latency_df, service_dict
 
 def run(prom_url, len_second, folder, config, mud_data, infinit_run):
@@ -102,6 +105,7 @@ def run(prom_url, len_second, folder, config, mud_data, infinit_run):
 
     
     event_counter = 0
+    anomaly_free_base_data = False
 
     DG = Metrics_collector.mpg(prom_url, folder)
 
@@ -116,31 +120,42 @@ def run(prom_url, len_second, folder, config, mud_data, infinit_run):
         service_dict, dumpster = remove_IoT_device_metrics(service_dict, mud_data)
 
         if len(latency_df) >= considered_timestamps:
-            #Fault injection handling
-            if event_counter in config['EVENTS']:
-                os.system("py chaos-mesh.py --fault " + config['EVENTS'][event_counter])
-                print('***** Fault: ' + config['EVENTS'][event_counter] + ' started *****')
 
-            #Anomaly detection handling
-            if infinit_run:
+            #wait until a clean base data is available
+            if not anomaly_free_base_data:
+                print("Wait until clean base data")
                 latency_df, anomalies = Anomaly_detector.Anomaly_detection_loop(latency_df, ad_threshold, anomaly_mode)
+                latency_df, service_dict = adjust_metrics_data( latency_df, service_dict, 'sliding_window', anomalies)
+                if len(anomalies) == 0:
+                    print("Clean base data available")
+                    anomaly_free_base_data = True
             else:
-                latency_df, anomalies = Anomaly_detector.Anomaly_detection_loop(latency_df, ad_threshold, None)
+                #Fault injection handling
+                if event_counter in config['EVENTS']:
+                    os.system("py chaos-mesh.py --fault " + config['EVENTS'][event_counter])
+                    print('***** Fault: ' + config['EVENTS'][event_counter] + ' started *****')
+
+                #Anomaly detection handling
+                if infinit_run:
+                    latency_df, anomalies = Anomaly_detector.Anomaly_detection_loop(latency_df, ad_threshold, anomaly_mode)
+                else:
+                    latency_df, anomalies = Anomaly_detector.Anomaly_detection_loop(latency_df, ad_threshold, None)
+                
+
+                if(len(anomalies) > 0):
+                    #service_dict = Metrics_collector.get_metrics_row(prom_url, start_time, end_time, service_dict)
+                    #service_dict, dumpster = remove_IoT_device_metrics(service_dict, mud_data)
+
+                    # latency_df = generate_latency_values(latency_df, amount_timestamps=5, nan_values=True, fault_injection=True)
+                    store_metrics_to_files(latency_df, service_dict, folder)
+
+                    #RCA
+                    anomaly_score = RCA_detector.anomaly_subgraph_2(DG, anomalies, latency_df, alpha, service_dict, mud_data, iot_connections)
+                    print(anomaly_score)
+                
+                latency_df, service_dict = adjust_metrics_data( latency_df, service_dict, anomaly_mode, anomalies)
+                event_counter += 1
             
-            latency_df, service_dict = adjust_metrics_data( latency_df, service_dict, anomaly_mode, anomalies)
-
-            if(len(anomalies) > 0):
-                #service_dict = Metrics_collector.get_metrics_row(prom_url, start_time, end_time, service_dict)
-                #service_dict, dumpster = remove_IoT_device_metrics(service_dict, mud_data)
-
-                # latency_df = generate_latency_values(latency_df, amount_timestamps=5, nan_values=True, fault_injection=True)
-                store_metrics_to_files(latency_df, service_dict, folder)
-
-                #RCA
-                anomaly_score = RCA_detector.anomaly_subgraph_2(DG, anomalies, latency_df, alpha, service_dict, mud_data, iot_connections)
-                print(anomaly_score)
-
-            event_counter += 1
 
         wait_rest_of_interval_time(end_time, interval_time)
 

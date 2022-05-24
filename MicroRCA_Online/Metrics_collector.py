@@ -124,7 +124,7 @@ def get_metric_services(prom_url, start_time, end_time):
 
     service_dict = {}
 
-    query = 'sum(rate(container_memory_working_set_bytes{namespace="sock-shop", container!~\'POD|istio-proxy|\'}[10m])) by (pod, instance, container)'
+    query = 'sum(rate(container_cpu_usage_seconds_total{namespace="sock-shop", container!~\'POD|istio-proxy|\'}[2m])) by (pod, instance, container)'
     results = prometheus_query(prom_url, start_time, end_time, query)
 
     for result in results:
@@ -161,55 +161,6 @@ def get_metric_services(prom_url, start_time, end_time):
 
         service_dict[svc] = df
     return service_dict
-
-
-def svc_metrics(prom_url, start_time, end_time):
-
-    query = 'sum(rate(container_cpu_usage_seconds_total{namespace="sock-shop", container!~\'POD|istio-proxy|\'}[10m])) by (pod, instance, container)'
-    results = prometheus_query(prom_url, start_time, end_time, query)
-
-    for result in results:
-        df = pd.DataFrame()
-        svc = result['metric']['container']
-        pod = result['metric']['pod']
-        nodename = result['metric']['instance']
-        values = result['value']
-
-        if 'timestamp' not in df:
-            timestamp = values[0]
-            df['timestamp'] = pd.Series(timestamp)
-            df['timestamp'] = df['timestamp'].astype('datetime64[s]')
-        metric = pd.Series(values[1])
-        df['ctn_cpu'] = metric
-        df['ctn_cpu'] = df['ctn_cpu'].astype('float64')
-
-        df['ctn_network'] = ctn_network(prom_url, start_time, end_time, pod)
-        df['ctn_network'] = df['ctn_network'].astype('float64')
-        df['ctn_memory'] = ctn_memory(prom_url, start_time, end_time, pod)
-        df['ctn_memory'] = df['ctn_memory'].astype('float64')
-
-#        response = requests.get('http://localhost:9090/api/v1/query',
-#                                params={'query': 'sum(node_uname_info{nodename="%s"}) by (instance)' % nodename
-#                                        })
-#        results = response.json()['data']['result']
-#
-#        print(results)
-#
-#
-#        instance = results[0]['metric']['instance']
-        instance = node_dict[nodename]
-
-        df_node_cpu = node_cpu(prom_url, start_time, end_time, instance)
-        df['node_cpu'] = df_node_cpu
-
-        df_node_network = node_network(prom_url, start_time, end_time, instance)
-        df['node_network'] = df_node_network
-
-        df_node_memory = node_memory(prom_url, start_time, end_time, instance)
-        df['node_memory'] = df_node_memory
-
-        df.set_index('timestamp')
-        return df
 
 def ctn_network(prom_url, start_time, end_time, pod):
 

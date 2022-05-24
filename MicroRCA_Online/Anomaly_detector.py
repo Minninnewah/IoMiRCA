@@ -55,7 +55,6 @@ def Anomaly_detection_loop(latency_df, ad_threshold, anomaly_mode= None):
     # get the anomalous service
     anomaly_nodes = []
     for anomaly in anomalies:
-        #if anomaly != "iot-handler_temperature-sensor":
         edge = anomaly.split('_')
         anomaly_nodes.append(edge[1])
 
