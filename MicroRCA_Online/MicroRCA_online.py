@@ -6,6 +6,7 @@
 """
 
 import argparse
+import math
 import time 
 import pandas as pd
 import yaml
@@ -54,18 +55,23 @@ def remove_IoT_device_metrics(data, mud_data):
     if isinstance(data, pd.DataFrame):
         for connection in data.keys():
             if any(device in connection for device in mud_data):
+                #Don't add connections with only zeros to active connections
+                #print(data[connection])
+                #print(data[connection].isnull())
+                
+                if not (data[connection].isnull()).all():
+                    #print("Add connection: " + connection)
+                    connections.append(connection)
                 data = data.drop(connection, axis=1)
-                connections.append(connection)
     
     elif isinstance(data, dict):
         for mud_connection in mud_data:
             if mud_connection in data:
                 data.pop(mud_connection)
+    #print(connections)
     return data, connections
 
 def adjust_metrics_data( latency_df, service_dict, anomaly_mode, anomalies):
-    #print(anomaly_mode)
-    #print(latency_df["catalogue_iot-handler"])
     if anomaly_mode is not None:
     
         if anomaly_mode == 'sliding_window':
@@ -87,7 +93,6 @@ def adjust_metrics_data( latency_df, service_dict, anomaly_mode, anomalies):
                     service_dict[svc].drop(service_dict[svc].tail(1).index, inplace=True)
         else:
             print("Anomaly mode not supported")
-    #print(latency_df["catalogue_iot-handler"])
     return latency_df, service_dict
 
 def run(prom_url, len_second, folder, config, mud_data, infinit_run):
@@ -110,11 +115,13 @@ def run(prom_url, len_second, folder, config, mud_data, infinit_run):
     DG = Metrics_collector.mpg(prom_url, folder)
 
     while infinit_run or len(latency_df) < considered_timestamps:
-        print("--- Loop [" + str(len(latency_df)) + " timestamps, " + str(event_counter) + " event-counter]: " + str(time.asctime(time.localtime(time.time()))), flush=True)
+        print("\n--- Loop [" + str(len(latency_df)) + " timestamps, " + str(event_counter) + " event-counter]: " + str(time.asctime(time.localtime(time.time()))) + ", Base data ready? " + str(anomaly_free_base_data), flush=True)
 
         end_time = time.time()
         start_time = end_time - len_second
         latency_df = Metrics_collector.get_latency_row(prom_url, start_time, end_time, latency_df)
+        #for item in latency_df:
+            #print(item)
         latency_df, iot_connections = remove_IoT_device_metrics(latency_df, mud_data)
         service_dict = Metrics_collector.get_metrics_row(prom_url, start_time, end_time, service_dict)
         service_dict, dumpster = remove_IoT_device_metrics(service_dict, mud_data)
@@ -123,9 +130,10 @@ def run(prom_url, len_second, folder, config, mud_data, infinit_run):
 
             #wait until a clean base data is available
             if not anomaly_free_base_data:
-                print("Wait until clean base data")
                 latency_df, anomalies = Anomaly_detector.Anomaly_detection_loop(latency_df, ad_threshold, anomaly_mode)
                 latency_df, service_dict = adjust_metrics_data( latency_df, service_dict, 'sliding_window', anomalies)
+                if "front-end_orders" in anomalies:
+                    anomalies.remove("front-end_orders")
                 if len(anomalies) == 0:
                     print("Clean base data available")
                     anomaly_free_base_data = True
@@ -141,17 +149,18 @@ def run(prom_url, len_second, folder, config, mud_data, infinit_run):
                 else:
                     latency_df, anomalies = Anomaly_detector.Anomaly_detection_loop(latency_df, ad_threshold, None)
                 
+                print("Anomalies: " + str(anomalies))
+                if "front-end_orders" in anomalies:
+                    anomalies.remove("front-end_orders")
 
                 if(len(anomalies) > 0):
-                    #service_dict = Metrics_collector.get_metrics_row(prom_url, start_time, end_time, service_dict)
-                    #service_dict, dumpster = remove_IoT_device_metrics(service_dict, mud_data)
-
-                    # latency_df = generate_latency_values(latency_df, amount_timestamps=5, nan_values=True, fault_injection=True)
                     store_metrics_to_files(latency_df, service_dict, folder)
 
                     #RCA
                     anomaly_score = RCA_detector.anomaly_subgraph_2(DG, anomalies, latency_df, alpha, service_dict, mud_data, iot_connections)
-                    print(anomaly_score)
+                    print("The three most likely root causes")
+                    anomaly_score.sort(key=lambda x: x[1], reverse=True)
+                    print(anomaly_score[:3])
                 
                 latency_df, service_dict = adjust_metrics_data( latency_df, service_dict, anomaly_mode, anomalies)
                 event_counter += 1

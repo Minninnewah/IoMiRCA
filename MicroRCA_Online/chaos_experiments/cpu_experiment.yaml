@@ -8,7 +8,7 @@ spec:
     namespaces:
       - sock-shop
     labelSelectors:
-      name: iot-handler
+      name: catalogue
   mode: all
   stressors:
     cpu:

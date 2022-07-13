@@ -49,8 +49,8 @@ def birch_ad_with_smoothing(latency_df, threshold):
 def Anomaly_detection_loop(latency_df, ad_threshold, anomaly_mode= None):
     
     anomalies = birch_ad_with_smoothing(latency_df, ad_threshold)
-    print("Anomalies")
-    print(anomalies)
+    #print("Anomalies")
+    #print(anomalies)
 
     # get the anomalous service
     anomaly_nodes = []

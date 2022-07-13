@@ -1,7 +1,11 @@
 from enum import Enum
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from Anomaly_detector import birch_ad_with_smoothing
 import networkx as nx
+from sklearn import preprocessing
+from sklearn.cluster import Birch
 
 def node_weight(svc, anomaly_graph, baseline_df, service_dict):
 
@@ -34,8 +38,47 @@ def node_weight(svc, anomaly_graph, baseline_df, service_dict):
     data = in_edges_weight_avg * max_corr
     return data, metric
 
-def svc_personalization(svc, anomaly_graph, baseline_df, service_dict):
+#birch
+def svc_personalization_1(svc, anomaly_graph, baseline_df, service_dict):
 
+    df = service_dict[svc]
+
+    #Get max outgoing edge to detect if the error is coming from somewhere
+    max_edge = 0
+    for u, v, data in anomaly_graph.in_edges(svc, data=True): #in edged because of inverted graph
+        print("Weight edge: " + str(data["weight"]))
+        if anomaly_graph.nodes[u]['type'] == 'service':
+            print("t")
+            if data["weight"] > max_edge:
+                max_edge = data["weight"]
+
+    #Check if there is a high possibility of the node being the anomalous service
+    ctn_cols = ['ctn_cpu', 'ctn_network', 'ctn_memory']
+    considered_anomalous = 0
+    metric = 'ctn_cpu'
+    for col in ctn_cols:
+        df[col] = df[col].rolling(window=12, min_periods=1).mean()
+        x = np.array(df[col])
+        x = np.where(np.isnan(x), 0, x)
+        normalized_x = preprocessing.normalize([x])
+
+        X = normalized_x.reshape(-1,1)
+
+        brc = Birch(branching_factor=50, n_clusters=None, threshold=0.085, compute_labels=True)
+        brc.fit(X)
+        brc.predict(X)
+
+        labels = brc.labels_
+        n_clusters = np.unique(labels).size
+        if n_clusters > 1:
+            considered_anomalous = 1
+            metric = col
+    weight = (considered_anomalous + (1-max_edge))/2
+    print(weight)
+    return weight, metric
+
+#correlation
+def svc_personalization_2(svc, anomaly_graph, baseline_df, service_dict):
     edges_weight_avg = 0.0
     num = 0
     for u, v, data in anomaly_graph.in_edges(svc, data=True):
@@ -60,17 +103,78 @@ def svc_personalization(svc, anomaly_graph, baseline_df, service_dict):
     max_corr = 0.01
     metric = 'ctn_cpu'
     for col in ctn_cols:
-        #print(baseline_df[svc])
-        #print(df[col])
         temp = abs(baseline_df[svc].corr(df[col]))     
         if temp > max_corr:
             max_corr = temp
             metric = col
-    personalization = edges_weight_avg * max_corr
+    personalization = max_corr
     #print(edges_weight_avg)
-    print(svc + " (" + str(metric) + "): " + str(max_corr))
+    print(svc + " (" + str(metric) + "): " + str(personalization))
 
     return personalization, metric
+
+#correlation with max weight
+def svc_personalization_3(svc, anomaly_graph, baseline_df, service_dict):
+        #Get max outgoing edge to detect if the error is coming from somewhere
+    max_edge = 0
+    for u, v, data in anomaly_graph.in_edges(svc, data=True): #in edged because of inverted graph
+        print("Weight edge: " + str(data["weight"]))
+        if anomaly_graph.nodes[u]['type'] == 'service':
+            print("t")
+            if data["weight"] > max_edge:
+                max_edge = data["weight"]
+    if svc not in service_dict:
+        #print(svc)
+        return max_edge, None
+
+    #filename = folder + "\\" + svc + '.csv'
+    #df = pd.read_csv(filename)
+    df = service_dict[svc]
+    #print(svc)
+    ctn_cols = ['ctn_cpu', 'ctn_network', 'ctn_memory']
+    max_corr = 0.01
+    metric = 'ctn_cpu'
+    for col in ctn_cols:
+        temp = abs(baseline_df[svc].corr(df[col]))     
+        if temp > max_corr:
+            max_corr = temp
+            metric = col
+    personalization = max_edge * max_corr
+    print(svc + " (" + str(metric) + "): " + str(personalization))
+
+
+    #Testing
+    personalization = (max_corr + (1-max_edge))/2
+    return personalization, metric
+
+def svc_personalization_4(svc, anomaly_graph, baseline_df, service_dict):
+    abr_limit = 2.5
+
+    df = service_dict[svc]
+
+    #Get max outgoing edge to detect if the error is coming from somewhere
+    max_edge = 0
+    for u, v, data in anomaly_graph.in_edges(svc, data=True): #in edged because of inverted graph
+        print("Weight edge: " + str(data["weight"]))
+        if anomaly_graph.nodes[u]['type'] == 'service':
+            print("t")
+            if data["weight"] > max_edge:
+                max_edge = data["weight"]
+
+    #Check if there is a high possibility of the node being the anomalous service
+    ctn_cols = ['ctn_cpu', 'ctn_network', 'ctn_memory']
+    considered_anomalous = 0
+    metric = 'ctn_cpu'
+    for col in ctn_cols:
+        print(df[col].iloc[-1])
+        print(df[col].iloc[-2])
+        if df[col].iloc[-1]> abr_limit * df[col].iloc[-2]:
+            print("TTTTTTTTtTTTT")
+            considered_anomalous = 1
+
+    weight = (considered_anomalous + (1-max_edge))/2
+    print(weight)
+    return weight, metric
 
 def printgraph(graph, name):
     plt.figure(figsize=(20,20))
@@ -278,14 +382,19 @@ def create_anomalous_subgraph(DG, nodes, edges, alpha, baseline_df, service_dict
 
     return anomaly_graph, anomalous_iot_nodes
 
-def calculate_service_personalization(anomaly_graph, nodes, baseline_df, service_dict):
+def calculate_service_personalization(anomaly_graph, nodes, baseline_df, service_dict, version):
     # Set personalization with container resource usage and MUD rules
     personalization = {}
     for node in nodes:
-        max_corr, col = svc_personalization(node, anomaly_graph, baseline_df, service_dict)
-        print(node)
-        print(col)
-        personalization[node] = max_corr / anomaly_graph.degree(node)
+        if version == 0:
+            max_corr, col = svc_personalization_1(node, anomaly_graph, baseline_df, service_dict)
+        elif version == 1:
+            max_corr, col = svc_personalization_2(node, anomaly_graph, baseline_df, service_dict)
+        elif version == 2:
+            max_corr, col = svc_personalization_3(node, anomaly_graph, baseline_df, service_dict)
+        elif version == 3:
+            max_corr, col = svc_personalization_4(node, anomaly_graph, baseline_df, service_dict)
+        personalization[node] = max_corr #/ anomaly_graph.degree(node)
 
     return personalization
 
@@ -336,6 +445,7 @@ def iot_personalization_weight_calculations(anomaly_graph, nodes, anomalous_iot_
 
 def anomaly_subgraph_2(DG, anomalies, latency_df, alpha, service_dict, mud_data, iot_connections):
 
+
     printgraph(DG, "graph_2")
     
     # Get reported anomalous nodes
@@ -354,18 +464,18 @@ def anomaly_subgraph_2(DG, anomalies, latency_df, alpha, service_dict, mud_data,
 
     anomaly_graph, anomalous_iot_nodes = create_anomalous_subgraph(DG, nodes, edges, alpha, baseline_df, service_dict, latency_df, iot_connections, mud_data)
     iot_edge_weight_calculations(anomaly_graph, nodes, anomalous_iot_nodes, mud_data, alpha)
+    for i in range(4):
+        personalization = calculate_service_personalization(anomaly_graph, nodes, baseline_df, service_dict, i)
+        personalization = iot_personalization_weight_calculations(anomaly_graph, nodes, anomalous_iot_nodes, personalization, mud_data, alpha)
+        
 
-    personalization = calculate_service_personalization(anomaly_graph, nodes, baseline_df, service_dict)
-    personalization = iot_personalization_weight_calculations(anomaly_graph, nodes, anomalous_iot_nodes, personalization, mud_data, alpha)
-    
+        #printgraph(anomaly_graph, "anomaly_graph_2")
+        print("Personalization" + str(i) + ":")
+        print(personalization)
+        anomaly_score = nx.pagerank(anomaly_graph, alpha=0.85, personalization=personalization, max_iter=10000)
 
-    printgraph(anomaly_graph, "anomaly_graph_2")
-
-    print("Personalization:")
-    print(personalization)
-    anomaly_score = nx.pagerank(anomaly_graph, alpha=0.85, personalization=personalization, max_iter=10000)
-
-    anomaly_score = sorted(anomaly_score.items(), key=lambda x: x[1], reverse=True)
+        anomaly_score = sorted(anomaly_score.items(), key=lambda x: x[1], reverse=True)
+        print(anomaly_score)
 
 #    return anomaly_graph
     return anomaly_score

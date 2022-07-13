@@ -53,11 +53,25 @@
                   "protocol": 6
                 },
                 "tcp": {
+                  "application-protocol": "edhoc",
                   "ietf-mud:direction-initiated": "to-device",
                   "destination-port": {
                     "operator": "eq",
                     "port": 3000
                   }
+                },
+                "edhoc": {
+                  "num-connections": {
+                    "operator": "lte",
+                    "value": 2
+                  },
+                  "keys": [
+                    {
+                      "alg": "ECDH-ES", 
+                      "crv": "P-256",
+                      "key_ops": "deriveKey"
+                    }
+                  ]
                 }
               },
               "actions": {
@@ -80,6 +94,7 @@
                   "protocol": 6
                 },
                 "tcp": {
+                  "application-protocol": "edhoc",
                   "ietf-mud:direction-initiated": "to-device",
                   "source-port": {
                     "operator": "eq",

@@ -85,6 +85,7 @@ def latency_destination_50(prom_url, start_time, end_time):
     results = prometheus_query(prom_url, start_time, end_time, query)
 
     for result in results:
+        #print(result)
         dest_svc = result['metric']['destination_workload']
         src_svc = result['metric']['source_workload']
         name = src_svc + '_' + dest_svc
@@ -101,10 +102,13 @@ def latency_destination_50(prom_url, start_time, end_time):
         latency_df[name] = pd.Series(metric)
         latency_df[name] = latency_df[name].astype('float64')
 
+    #for i in latency_df:
+        #print(i)
     query = 'sum(irate(istio_tcp_sent_bytes_total{reporter=\"destination\"}[2m])) by (destination_workload, source_workload) / 1000'
     results = prometheus_query(prom_url, start_time, end_time, query)
 
     for result in results:
+        #print(result)
         dest_svc = result['metric']['destination_workload']
         src_svc = result['metric']['source_workload']
         name = src_svc + '_' + dest_svc
