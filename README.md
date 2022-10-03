@@ -1,3 +1,11 @@
+## IoMiRCA : IoT microservice root cause analysis
+This project is based on the MicroRCA code with some changes and an adapted [testbed](https://github.com/Minninnewah/microservices-demo) considering IoT devices.
+
+The load generation is done with a [locust script](https://github.com/Minninnewah/Sock-shop_load)
+
+
+
+
 ## MicroRCA:  Microservices root cause analysis
 
 This project provides the source code of MicroRCA.
